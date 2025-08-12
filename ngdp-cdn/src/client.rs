@@ -4,7 +4,7 @@ use crate::{Error, Result};
 use reqwest::{Client, Response};
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 /// Default maximum retries (0 = no retries, maintains backward compatibility)
 const DEFAULT_MAX_RETRIES: u32 = 3;
@@ -27,7 +27,10 @@ const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 30;
 /// Default request timeout
 const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 300;
 
-/// CDN client for downloading content
+/// Default fallback CDN servers (community mirrors)
+const DEFAULT_FALLBACK_HOSTS: &[&str] = &["cdn.arctium.tools", "tact.mirror.reliquaryhq.com"];
+
+/// CDN client for downloading content with automatic fallback
 #[derive(Debug)]
 pub struct CdnClient {
     /// HTTP client with connection pooling
@@ -48,6 +51,10 @@ pub struct CdnClient {
     jitter_factor: f64,
     /// Custom user agent string
     user_agent: Option<String>,
+    /// Primary CDN hosts (tried first)
+    primary_hosts: std::sync::Arc<parking_lot::RwLock<Vec<String>>>,
+    /// Fallback CDN hosts (tried after primary)
+    fallback_hosts: std::sync::Arc<parking_lot::RwLock<Vec<String>>>,
 }
 
 impl CdnClient {
@@ -71,6 +78,13 @@ impl CdnClient {
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
             user_agent: None,
+            primary_hosts: std::sync::Arc::new(parking_lot::RwLock::new(Vec::new())),
+            fallback_hosts: std::sync::Arc::new(parking_lot::RwLock::new(
+                DEFAULT_FALLBACK_HOSTS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            )),
         })
     }
 
@@ -86,12 +100,92 @@ impl CdnClient {
             backoff_multiplier: DEFAULT_BACKOFF_MULTIPLIER,
             jitter_factor: DEFAULT_JITTER_FACTOR,
             user_agent: None,
+            primary_hosts: std::sync::Arc::new(parking_lot::RwLock::new(Vec::new())),
+            fallback_hosts: std::sync::Arc::new(parking_lot::RwLock::new(
+                DEFAULT_FALLBACK_HOSTS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            )),
         }
     }
 
     /// Create a builder for configuring the CDN client
     pub fn builder() -> CdnClientBuilder {
         CdnClientBuilder::new()
+    }
+
+    /// Add a primary CDN host
+    ///
+    /// Primary hosts are tried before fallback hosts
+    pub fn add_primary_host(&self, host: impl Into<String>) {
+        let mut hosts = self.primary_hosts.write();
+        let host = host.into();
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+
+    /// Add multiple primary CDN hosts
+    pub fn add_primary_hosts(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        let mut primary = self.primary_hosts.write();
+        for host in hosts {
+            let host = host.into();
+            if !primary.contains(&host) {
+                primary.push(host);
+            }
+        }
+    }
+
+    /// Set primary CDN hosts, replacing any existing ones
+    pub fn set_primary_hosts(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        let mut primary = self.primary_hosts.write();
+        primary.clear();
+        for host in hosts {
+            primary.push(host.into());
+        }
+    }
+
+    /// Add a fallback CDN host
+    pub fn add_fallback_host(&self, host: impl Into<String>) {
+        let mut hosts = self.fallback_hosts.write();
+        let host = host.into();
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+
+    /// Add multiple fallback CDN hosts
+    pub fn add_fallback_hosts(&self, hosts: impl IntoIterator<Item = impl Into<String>>) {
+        let mut fallback = self.fallback_hosts.write();
+        for host in hosts {
+            let host = host.into();
+            if !fallback.contains(&host) {
+                fallback.push(host);
+            }
+        }
+    }
+
+    /// Clear all primary hosts
+    pub fn clear_primary_hosts(&self) {
+        self.primary_hosts.write().clear();
+    }
+
+    /// Clear all fallback hosts  
+    pub fn clear_fallback_hosts(&self) {
+        self.fallback_hosts.write().clear();
+    }
+
+    /// Disable fallback hosts (only use primary)
+    pub fn disable_fallbacks(&self) {
+        self.clear_fallback_hosts();
+    }
+
+    /// Get all configured hosts (primary first, then fallback)
+    pub fn get_all_hosts(&self) -> Vec<String> {
+        let mut hosts = self.primary_hosts.read().clone();
+        hosts.extend(self.fallback_hosts.read().clone());
+        hosts
     }
 
     /// Set the maximum number of retries
@@ -138,7 +232,6 @@ impl CdnClient {
         if self.tact_client.is_none() {
             use tact_client::{HttpClient, ProtocolVersion, Region};
 
-            // Create TACT client with shared connection pool
             let mut tact_client = HttpClient::with_shared_pool(Region::US, ProtocolVersion::V2)
                 .with_max_retries(self.max_retries)
                 .with_initial_backoff_ms(self.initial_backoff_ms);
@@ -165,7 +258,6 @@ impl CdnClient {
         if batcher_guard.is_none() {
             use tact_client::{BatchConfig, RequestBatcher};
 
-            // Create HTTP/2 client with optimizations for CDN requests
             let client = reqwest::Client::builder()
                 // HTTP/2 is automatically negotiated when available
                 .pool_max_idle_per_host(50) // Higher connection pool for batching
@@ -205,7 +297,6 @@ impl CdnClient {
             self.initial_backoff_ms as f64 * self.backoff_multiplier.powi(attempt as i32);
         let capped_backoff = base_backoff.min(self.max_backoff_ms as f64);
 
-        // Add jitter
         let jitter_range = capped_backoff * self.jitter_factor;
         let jitter = rand::random::<f64>() * 2.0 * jitter_range - jitter_range;
         let final_backoff = (capped_backoff + jitter).max(0.0) as u64;
@@ -235,7 +326,6 @@ impl CdnClient {
                 Ok(response) => {
                     trace!("Response status: {}", response.status());
 
-                    // Check if we should retry based on status code
                     let status = response.status();
 
                     // Success - return the response
@@ -289,7 +379,6 @@ impl CdnClient {
                     return Err(Error::Http(response.error_for_status().unwrap_err()));
                 }
                 Err(e) => {
-                    // Check if error is retryable
                     let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
 
                     if is_retryable && attempt < self.max_retries {
@@ -344,10 +433,84 @@ impl CdnClient {
         Ok(url)
     }
 
-    /// Download content from CDN by hash
-    pub async fn download(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
+    /// Check if content exists on CDN using HEAD request
+    pub async fn check_exists(&self, cdn_host: &str, path: &str, hash: &str) -> Result<bool> {
         let url = Self::build_url(cdn_host, path, hash)?;
-        self.request(&url).await
+
+        debug!("CDN HEAD request to {}", url);
+
+        let mut request = self.client.head(&url);
+        if let Some(ref user_agent) = self.user_agent {
+            request = request.header("User-Agent", user_agent);
+        }
+
+        match request.send().await {
+            Ok(response) => Ok(response.status().is_success()),
+            Err(_) => Ok(false), // Treat network errors as not found
+        }
+    }
+
+    /// Download content from CDN by hash with automatic fallback
+    pub async fn download(&self, cdn_host: &str, path: &str, hash: &str) -> Result<Response> {
+        // Get all hosts to try (primary first, then fallback)
+        let mut hosts_to_try = Vec::new();
+
+        // Add the provided host first if it's not already in our lists
+        let provided_host = cdn_host.to_string();
+        if !self.primary_hosts.read().contains(&provided_host)
+            && !self.fallback_hosts.read().contains(&provided_host)
+        {
+            hosts_to_try.push(provided_host);
+        }
+
+        hosts_to_try.extend(self.primary_hosts.read().clone());
+
+        hosts_to_try.extend(self.fallback_hosts.read().clone());
+
+        if hosts_to_try.is_empty() {
+            // If no hosts configured, just use the provided host
+            let url = Self::build_url(cdn_host, path, hash)?;
+            return self.request(&url).await;
+        }
+
+        // Try each host in order
+        let mut last_error = None;
+        for (index, host) in hosts_to_try.iter().enumerate() {
+            // Check if file exists using HEAD request first
+            match self.check_exists(host, path, hash).await {
+                Ok(true) => {
+                    debug!("File {} exists on CDN {}", hash, host);
+
+                    // Try to download
+                    let url = Self::build_url(host, path, hash)?;
+                    match self.request(&url).await {
+                        Ok(response) => {
+                            if index > 0 {
+                                info!(
+                                    "Successfully downloaded from {} (attempt {})",
+                                    host,
+                                    index + 1
+                                );
+                            }
+                            return Ok(response);
+                        }
+                        Err(e) => {
+                            warn!("Failed to download from CDN {}: {}", host, e);
+                            last_error = Some(e);
+                        }
+                    }
+                }
+                Ok(false) => {
+                    debug!("File {} not found on CDN {}", hash, host);
+                }
+                Err(e) => {
+                    debug!("HEAD request failed for CDN {}: {}", host, e);
+                }
+            }
+        }
+
+        // All hosts failed
+        Err(last_error.unwrap_or_else(|| Error::content_not_found(hash)))
     }
 
     /// Download BuildConfig from CDN
@@ -487,7 +650,6 @@ impl CdnClient {
         path: &str,
         hashes: &[String],
     ) -> Vec<Result<Vec<u8>>> {
-        // Create batch requests for all hashes
         let requests = tact_client::RequestBatcher::create_cdn_requests(cdn_host, path, hashes);
 
         // Get the request batcher
@@ -1193,6 +1355,13 @@ impl CdnClientBuilder {
             backoff_multiplier: self.backoff_multiplier,
             jitter_factor: self.jitter_factor,
             user_agent: self.user_agent,
+            primary_hosts: std::sync::Arc::new(parking_lot::RwLock::new(Vec::new())),
+            fallback_hosts: std::sync::Arc::new(parking_lot::RwLock::new(
+                DEFAULT_FALLBACK_HOSTS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            )),
         })
     }
 }
@@ -1254,7 +1423,6 @@ mod tests {
             .with_backoff_multiplier(2.0)
             .with_jitter_factor(0.0); // No jitter for predictable test
 
-        // Test exponential backoff
         let backoff0 = client.calculate_backoff(0);
         assert_eq!(backoff0.as_millis(), 100); // 100ms * 2^0 = 100ms
 
@@ -1264,7 +1432,6 @@ mod tests {
         let backoff2 = client.calculate_backoff(2);
         assert_eq!(backoff2.as_millis(), 400); // 100ms * 2^2 = 400ms
 
-        // Test max backoff capping
         let backoff5 = client.calculate_backoff(5);
         assert_eq!(backoff5.as_millis(), 1000); // Would be 3200ms but capped at 1000ms
     }
@@ -1296,7 +1463,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_parallel_download_ordering() {
-        // Test that results are returned in the same order as input
         let client = CdnClient::new().unwrap();
         let cdn_host = "example.com";
         let path = "test";

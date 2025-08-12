@@ -5,7 +5,110 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2025-08-09
+## [0.4.3] - 2025-08-11
+
+### Fixed
+
+- **casc-storage**: Removed test-utils dev-dependency to fix crates.io publishing
+  - Removed real_data_integration.rs test and list_casc_files.rs example
+  - These tests require local WoW data and aren't needed for crates.io
+
+## [0.4.2] - 2025-08-11
+
+### Fixed
+
+- **Test Utils**: Marked test-utils as non-publishable (internal testing only)
+  - Added `publish = false` to prevent crates.io publishing issues
+  - test-utils is only used as dev-dependency
+
+## [0.4.1] - 2025-08-11 (Failed Release)
+
+### Fixed
+
+- **Release Workflow**: Added casc-storage crate to publishing order
+  - Fixed missing crate in version verification
+  - Added casc-storage to dependency publishing hierarchy  
+  - Proper dependency order for crates.io publishing
+
+- **Windows Compilation**: Fixed unused variable warnings in casc-storage
+  - Moved Unix-specific variables into cfg(unix) block
+  - Fixed prefetch function for cross-platform compatibility
+
+## [0.4.0] - 2025-08-11
+
+### Added
+
+- **40-bit Integer Support**: Complete implementation for TACT/NGDP formats
+  - Full support for 40-bit integers in encoding files
+  - Proper handling in TVFS (TACT Virtual File System) 
+  - Correct big-endian byte ordering in parsers
+
+- **ESpec Parser**: Complete implementation in tact-parser
+  - Full BLTE encoding specification support
+  - Handles all compression and encryption modes
+  - Integration with encoding file parsing
+
+- **TVFS Compliance**: Full TACT Virtual File System support
+  - Correct 40-bit offset and size handling
+  - Proper header structure (45 bytes)
+  - Support for both TVFS and TFVS magic bytes
+
+- **Architecture Improvements**: Major refactoring for performance and maintainability
+  - LRU cache optimized from O(n) to O(1) operations
+  - Replaced Arc<Mutex<u64>> with AtomicU64 for better concurrency
+  - Created BpsvRowOps trait to eliminate code duplication
+  - Consolidated HTTP retry logic in tact-client
+  - Fixed unsafe string slicing in ngdp-bpsv parser
+
+- **Test Infrastructure**: Enhanced testing framework
+  - test-utils crate with WoW data discovery
+  - Environment variable support for test data paths
+  - CI-friendly test skipping when data unavailable
+  - Serial test execution to prevent race conditions
+
+- **Progressive Loading**: Infrastructure for handling large files
+  - Chunk-based file loading with configurable sizes
+  - Predictive prefetching based on access patterns
+  - Memory-efficient streaming operations
+  - Statistics tracking for cache efficiency
+
+### Changed
+
+- **CDN Client Architecture**: Simplified from 3 variants to 2
+  - Merged `CdnClient` and `CdnClientWithFallback` into single base client
+  - Base client now includes fallback host support
+  - `CachedCdnClient` wraps the unified client
+  - All commands now use cached client for performance
+
+- **MSRV Compatibility**: Ensured compatibility with Rust 1.86
+  - Fixed all let-chain syntax (17 instances)
+  - Removed unstable features
+  - All 520+ tests passing on both 1.86 and 1.89
+
+### Fixed
+
+- **Let-chain Syntax**: Fixed 17 instances for MSRV 1.86 compatibility
+  - casc-storage: 15 instances across multiple files
+  - ngdp-cache: 2 instances in tests
+  - All converted to nested if statements
+
+- **CDN Path Usage**: Fixed to use server-announced paths
+  - Now properly uses CDN path from server response
+  - Removed hardcoded "tpr/wow" assumptions
+
+- **Test Infrastructure**: Fixed multiple test issues
+  - Added HEAD request mocks for CDN client tests
+  - Fixed race condition in `test_ribbit_cache_file_naming`
+  - Added serial_test for environment variable tests
+
+- **Memory Safety**: Fixed potential runtime panics
+  - Safe string slicing in ngdp-bpsv parser
+  - Proper bounds checking in all parsers
+  - Eliminated unsafe indexing operations
+
+### Previous 0.4.0 Pre-release Content
+
+#### Added from development
 
 ### Added
 

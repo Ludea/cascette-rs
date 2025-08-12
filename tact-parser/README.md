@@ -8,7 +8,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tact-parser = "0.3"
+tact-parser = "0.4.3"
 ```
 
 ## Overview
@@ -22,6 +22,7 @@ This crate provides parsers for various TACT file formats used by Blizzard's con
 - **Build Configurations** - Key-value format for build metadata
 - **WoW Root Files** - Maps file IDs to content hashes
 - **TVFS (TACT Virtual File System)** - Virtual filesystem structure
+- **ESpec Parser** - Encoding specification parser for BLTE compression modes
 
 ## Features
 
@@ -58,14 +59,22 @@ This crate provides parsers for various TACT file formats used by Blizzard's con
   - Efficient lookup structures
 
 - ✅ **TVFS** (`tvfs.rs`)
-  - Virtual filesystem parsing
-  - Directory structure recreation
-  - File attribute support
+  - Virtual filesystem parsing with specification compliance
+  - Big-endian 40-bit integer support for modern game builds
+  - Directory structure recreation and file attribute support
+
+- ✅ **ESpec Parser** (`espec.rs`)
+  - Complete EBNF grammar implementation for BLTE compression
+  - Support for all modes: None, ZLib, Encrypted, BlockTable, BCPack, GDeflate
+  - Complex block specifications with size expressions (K/M units, multipliers)
+  - Integration with BLTE decompression system
 
 ### Utility Features
 
-- **40-bit Integer Support** - Custom type for TACT's 40-bit integers
-- **Variable-length Integer Parsing** - Efficient varint implementation
+- **40-bit Integer Support** - Big/little-endian implementation
+  - Standard 40-bit integers and TACT encoding format (1 byte + 4-byte BE u32)
+  - Support for file sizes up to 1TB with proper endianness handling
+- **Variable-length Integer Parsing** - Varint implementation
 - **Jenkins Hash** - TACT's hash algorithm implementation
 - **Compression Support** - Integration with BLTE decompression
 
@@ -100,6 +109,22 @@ for file in files {
 }
 ```
 
+### Parse ESpec Compression Specification
+
+```rust
+use tact_parser::ESpec;
+
+// Parse a complex block table specification
+let spec = ESpec::parse("b:{1M*3=z:9,512K=n,*=z:6}")?;
+
+// Check compression properties
+println!("Uses compression: {}", spec.is_compressed());
+println!("Type: {}", spec.compression_type());
+
+// Convert back to string format
+println!("ESpec: {}", spec.to_string());
+```
+
 ### Parse Build Configuration
 
 ```rust
@@ -119,7 +144,7 @@ if let Some(version) = config.get("version") {
 The parsers are optimized for:
 
 - Memory efficiency with streaming where possible
-- Fast lookups using appropriate data structures
+- Lookups using appropriate data structures
 - Minimal allocations during parsing
 - Support for large files (GB+ encoding tables)
 
@@ -134,9 +159,13 @@ This crate integrates with other cascette-rs components:
 
 ## License
 
-This project is dual-licensed under either:
+This crate is dual-licensed under either:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](../LICENSE-MIT))
+- MIT license ([LICENSE-MIT](../LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
