@@ -21,7 +21,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true, features = ["derive", "cargo", "env"] }
-comfy-table = "7.1.4"
+#comfy-table = "7.1.4"
 owo-colors = { version = "4.2.2", features = ["supports-colors"] }
 ribbit-client = { path = "../ribbit-client", version = "0.4.3" }
 tact-client = { path = "../tact-client", version = "0.4.3" }
@@ -42,7 +42,7 @@ serde_json = "1.0.142"
 tempfile = "3.20"
 toml.workspace = true
 dirs.workspace = true
-reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "json"] }
+#reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "json"] }
 base64 = "0.22.1"
 x509-cert = "0.2"
 der = "0.7"
@@ -52,6 +52,19 @@ regex = "1.10.2"
 indicatif = "0.17"
 futures = "0.3"
 byteorder = "1.5"
+rustls = { version = "0.23.23", default-features = false }
+rustls-rustcrypto = "0.0.2-alpha"
+webpki-roots = "0.26.8"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+comfy-table = "7.1.4"
+
+[dependencies.reqwest]
+git = "https://github.com/pimeys/reqwest"
+branch = "wasip2"
+default-features = false
+features = ["rustls-tls-webpki-roots-no-provider", "json"]
+
 
 [dev-dependencies]
 assert_cmd = "2.0.17"

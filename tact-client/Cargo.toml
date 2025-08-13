@@ -19,13 +19,23 @@ categories = [
 futures-util = "0.3.31"
 ngdp-bpsv = { path = "../ngdp-bpsv", version = "0.4.3" }
 rand.workspace = true
-reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "json", "stream"] }
+#reqwest = { version = "0.12.22", default-features = false, features = ["rustls-tls", "json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1.0.142"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full", "fs"] }
 tracing.workspace = true
 url = "2.5.4"
+rustls = { version = "0.23.23", default-features = false }
+rustls-rustcrypto = "0.0.2-alpha"
+webpki-roots = "0.26.8"
+
+[dependencies.reqwest]
+git = "https://github.com/pimeys/reqwest"
+branch = "wasip2"
+default-features = false
+features = ["rustls-tls-webpki-roots-no-provider", "json"]
+
 
 [dev-dependencies]
 criterion.workspace = true
