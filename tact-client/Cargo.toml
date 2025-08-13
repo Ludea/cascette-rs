@@ -34,8 +34,7 @@ webpki-roots = "0.26.8"
 git = "https://github.com/pimeys/reqwest"
 branch = "wasip2"
 default-features = false
-features = ["rustls-tls-webpki-roots-no-provider", "json"]
-
+features = ["rustls-tls-webpki-roots-no-provider", "json", "stream"]
 
 [dev-dependencies]
 criterion.workspace = true
