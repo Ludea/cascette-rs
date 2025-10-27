@@ -1,0 +1,78 @@
+[package]
+name = "cascette-import"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Community data source integration for cascette-rs NGDP/CASC system"
+categories = ["network-programming", "games", "api-bindings"]
+keywords = ["wago", "listfile", "tact", "ngdp", "casc"]
+readme = "README.md"
+
+[dependencies]
+# Workspace dependencies
+thiserror = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+dashmap = { workspace = true }
+
+# Internal dependencies
+cascette-crypto = { path = "../cascette-crypto", features = ["keyring"] }
+
+# HTTP client for API requests
+reqwest = { version = "0.12", features = ["json", "stream", "gzip"] }
+
+# Async trait support
+async-trait = { version = "0.1" }
+
+# Git operations for repository data
+git2 = { version = "0.19", default-features = false }
+
+# URL handling
+url = { version = "2.5" }
+
+# Time handling for caching
+chrono = { version = "0.4", features = ["serde"] }
+
+# System directories
+dirs = { workspace = true }
+
+# Compression for listfile data
+flate2 = { workspace = true }
+
+# Hex encoding/decoding
+hex = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = ["wago", "listfile", "tactkeys"]
+
+# Individual data source features
+wago = []
+listfile = []
+tactkeys = []
+
+# Alternative providers
+p2p = []
+custom-cdn = []
+
+# Development features
+dev = ["tracing/max_level_debug"]
+
+[package.metadata.cargo-machete]
+# These dependencies are used internally or for specific features
+ignored = ["flate2", "url"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

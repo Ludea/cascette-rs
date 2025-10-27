@@ -1,0 +1,73 @@
+[package]
+name = "cascette-client-storage"
+description = "Local CASC storage implementation for game installations"
+keywords = ["casc", "ngdp", "storage", "warcraft", "blizzard"]
+categories = ["filesystem", "game-development", "caching"]
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Workspace dependencies
+thiserror = { workspace = true }
+binrw = { workspace = true }
+hex = { workspace = true }
+
+# Internal dependencies
+cascette-formats = { path = "../cascette-formats" }
+cascette-crypto = { path = "../cascette-crypto" }
+cascette-cache = { path = "../cascette-cache" }
+
+# File I/O and memory mapping
+memmap2 = "0.9"
+tempfile = "3.15"
+
+# Compression
+flate2 = "1.0"
+
+# Async runtime
+tokio = { version = "1.47", features = [
+  "fs",
+  "io-util",
+  "sync",
+  "rt-multi-thread",
+] }
+futures = "0.3"
+
+
+# Concurrency
+parking_lot = "0.12"
+dashmap = "6.1"
+
+# Serialization for metadata
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Platform-specific dependencies
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = [
+  "handleapi",
+  "memoryapi",
+  "minwindef",
+  "winnt",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.15"
+proptest = "1.6"
+
+[package.metadata.cargo-machete]
+# These dependencies are used internally or for specific features
+ignored = ["flate2", "serde_json"]
+
+[lints]
+workspace = true

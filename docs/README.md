@@ -1,184 +1,283 @@
-# Cascette Documentation
+# NGDP Documentation
 
-Welcome to the Cascette documentation! This directory contains detailed technical
-documentation for understanding and working with Blizzard's NGDP (Next Generation
-Distribution Pipeline) protocols and formats.
+## Introduction to NGDP
 
-## 📚 Documentation Overview
+NGDP (Next Generation Distribution Pipeline) is Blizzard Entertainment's
+content distribution system. It provides an API for product information and
+updates, with data delivered through regionalized CDNs. NGDP replaced the
+MPQ/P2P/Torrent-based distribution system with the release of
+[World of Warcraft 6.0](https://warcraft.wiki.gg/wiki/Patch_6.0) in 2014.
 
-### System Architecture
+For technical details, see [NGDP on wowdev.wiki](https://wowdev.wiki/NGDP).
 
-#### [Complete NGDP Ecosystem](ngdp-ecosystem-complete.md) 🆕
+## System Overview
 
-Comprehensive overview of the entire NGDP ecosystem from content creation to distribution:
+NGDP consists of two components:
 
-- Creative tools integration (Blender, Maya, level editors)
-- Content management system architecture
-- Build pipeline from raw assets to NGDP packages
-- Ribbit server as central orchestrator
-- CDN distribution network
-- Complete replacement system requirements
-- Implementation roadmap and success metrics
+1. **Ribbit API**: Provides product versions, CDN endpoints, and configuration
+data
+2. **CDN Distribution**: Delivers game content through HTTP/HTTPS
 
-### Core Protocol Documentation
+## Key Differences from MPQ
 
-#### [BPSV Format Specification](bpsv-format.md)
+- **Distribution Method**: CDN-based delivery instead of P2P/Torrent
 
-The Blizzard Pipe-Separated Values (BPSV) format is the foundation of NGDP data
-exchange. This document covers:
+- **Content Addressing**: Files identified by content hashes rather than names
 
-- Complete format specification with field types (STRING, HEX, DEC)
-- Schema definitions and validation rules
-- Sequence number handling for version tracking
-- Real-world examples from Ribbit and TACT responses
-- Best practices for parsing and building BPSV documents
+- **Update Mechanism**: Incremental updates through partial file downloads
 
-#### [Ribbit Protocol](ribbit-protocol.md)
+- **Archive Format**: CASC (Content Addressable Storage Container) replaces MPQ
+archives
 
-Ribbit is Blizzard's TCP-based protocol for retrieving version information and
-metadata. This document includes:
+- **Content Protection**: Encryption support for secure pre-release distribution
 
-- Protocol versions (V1 MIME-based and V2 raw PSV)
-- Complete endpoint reference (Summary, Versions, CDNs, BGDL, Certs, OCSP)
-- Authentication and signature verification using PKCS#7/CMS
-- Region-specific server information
-- Implementation notes and gotchas
+## Benefits of NGDP
 
-#### [TACT Protocol](tact-protocol.md)
+### For Distribution
 
-TACT (Trusted Application Content Transfer) handles content distribution from CDN
-servers. This document covers:
+- **Reduced Server Load**: CDN infrastructure handles content delivery
 
-- HTTP (v1) and HTTPS (v2) protocol versions - **v2 is now default and recommended**
-- Version server endpoints and response formats
-- CDN content URL structure and hash-based paths
-- File formats (manifests, configurations, archives)
-- BLTE encoding and encryption details
-- **NEW**: HTTP range request support for partial downloads
-- **NEW**: Streaming decompression for memory-efficient processing
-- Integration with CASC for local storage
+- **Faster Downloads**: Users connect to nearest CDN nodes
 
-### Additional Resources
+- **Incremental Updates**: Only changed content needs downloading
 
-#### [Performance Optimization Report](performance-optimization-report.md)
+- **Parallel Downloads**: Multiple files retrieved simultaneously
 
-Detailed analysis of performance improvements implemented across all crates:
+- **Pre-release Distribution**: Encrypted content can be distributed before
+launch
 
-- Zero-copy parsing optimizations
-- Parallel download strategies
-- Streaming I/O operations with BLTE decompression
-- HTTP range requests for bandwidth optimization
-- Benchmark results and metrics
+### For Development
 
-#### [API Reference Guide](api-reference.md)
+- **Content Deduplication**: Identical files stored once
 
-Comprehensive API documentation for key features:
+- **Version Management**: Multiple game versions share common assets
 
-- Streaming BLTE decompression with BLTEStream
-- HTTP range request methods for partial downloads
-- File download command implementation
-- Cache management and statistics
+- **Stream Installation**: Games playable before download completes
 
-#### [Command Testing Guide](command-testing-guide.md)
+- **Platform Independence**: Same content system across operating systems
 
-Step-by-step testing instructions for all ngdp commands:
+- **Content Protection**: Encryption prevents early access to unreleased content
 
-- Logical testing order from basic to advanced commands
-- Real-world examples using wow_classic_era product
-- Local storage testing with WoW client version 1.14.2
-- Validation tests for different products and regions
-- Troubleshooting guide and success criteria
+## Core Concepts
 
-#### Temporary Research Notes (temp/)
+### Content Addressing
 
-The `temp/` directory contains research notes and analysis from studying reference
-implementations. These are working documents that helped inform our implementation
-decisions.
+Files are identified by cryptographic hashes of their content. This enables:
 
-## 🔗 Quick Links
+- Automatic deduplication
 
-### External References
+- Integrity verification
 
-- [NGDP Overview on wowdev.wiki](https://wowdev.wiki/NGDP)
-- [TACT Details on wowdev.wiki](https://wowdev.wiki/TACT)
-- [CASC Storage Format](https://wowdev.wiki/CASC)
-- [Wago Tools API Documentation](https://wago.tools/apis)
+- Cache efficiency
 
-### Related Crate Documentation
+### System Files
 
-- [ngdp-bpsv](../ngdp-bpsv/README.md) - BPSV parser/writer implementation
-- [ribbit-client](../ribbit-client/README.md) - Ribbit protocol client
-- [tact-client](../tact-client/README.md) - TACT HTTP/HTTPS client with range requests
-- [tact-parser](../tact-parser/README.md) - TACT file format parsers (all formats complete)
-- [ngdp-cdn](../ngdp-cdn/README.md) - CDN content delivery with fallback support
-- [ngdp-cache](../ngdp-cache/README.md) - Caching layer with TTL management
-- [blte](../blte/README.md) - BLTE decompression library with streaming support
-- [ngdp-crypto](../ngdp-crypto/README.md) - Encryption/decryption with 19,000+ keys
-- [ngdp-client](../ngdp-client/README.md) - CLI tool with download and inspect commands
+NGDP uses metadata files to manage content:
 
-## 📖 Reading Order
+- **Root File**: Maps game files to content keys
 
-If you're new to NGDP, we recommend reading the documentation in this order:
+- **Encoding File**: Maps content to compressed versions
 
-1. **[Complete NGDP Ecosystem](ngdp-ecosystem-complete.md)** - Understand the full system
-   architecture from content creation to distribution
-2. **[BPSV Format](bpsv-format.md)** - Understanding the data format used throughout
-   NGDP
-3. **[Ribbit Protocol](ribbit-protocol.md)** - How to retrieve version and configuration
-   information
-4. **[TACT Protocol](tact-protocol.md)** - How content is distributed and downloaded
-5. **[Command Testing Guide](command-testing-guide.md)** - Hands-on testing of all functionality
+- **Install Manifest**: Defines installation requirements
 
-## 🎯 Use Cases
+- **Download Manifest**: Sets download priorities
 
-### For Library Users
+### BLTE Format
 
-- Start with the BPSV format to understand data structures
-- Review the protocol documentation for the specific client you're using
-- Follow the command testing guide to verify functionality
-- Check the performance optimization report for efficiency tips
+BLTE (Block Table Encoded) is the container format for game data. It supports:
 
-### For Contributors
+- Block-based compression
 
-- Read all core protocol documentation thoroughly
-- Review the research notes in `temp/` for implementation insights
-- Understand the performance characteristics documented in the optimization report
+- Multiple compression algorithms
 
-### For WoW Emulation Developers
+- Encryption per block
 
-- Focus on the Ribbit protocol for version management
-- Understand TACT for content distribution
-- Review BPSV format for parsing game metadata
+- Chunked processing
 
-## 📝 Documentation Standards
+### Content Encryption
 
-All documentation in this directory follows these principles:
+NGDP supports encryption for:
 
-- Technical accuracy with references to official sources
-- Clear examples demonstrating real-world usage
-- Structured format with consistent headings
-- Focus on implementation details relevant to Rust development
+- Pre-release content distribution
 
-## 🔄 Keeping Documentation Updated
+- Protecting unreleased game data
 
-When making changes to the codebase:
+- Secure content delivery before activation
 
-1. Update relevant protocol documentation if behavior changes
-2. Add new examples when implementing features
-3. Document any discovered quirks or edge cases
-4. Keep external reference links current
+## Technical Specifications
 
-## 📞 Getting Help
+- **Byte Order**: Big-endian (network byte order)
 
-If you have questions about the documentation:
+- **Hash Algorithm**: MD5 for content identification
 
-1. Check the [main project README](../README.md) for quick start guides
-2. Review the examples in each crate's `examples/` directory
-3. Open an issue on GitHub for clarification requests
-4. Contribute improvements via pull requests
+- **Key Size**: 128-bit (16 bytes)
 
----
+- **Compression**: zlib, lz4, and other algorithms per block
 
-**Note**: This project is not affiliated with or endorsed by Blizzard Entertainment.
-It is an independent implementation based on reverse engineering efforts by the
-community for educational and preservation purposes.
+- **Encryption**: Salsa20 stream cipher for content protection
+
+## Format Organization
+
+NGDP/CASC formats are organized by their storage location and usage context:
+
+### 1. CDN Formats (Network/Remote)
+
+Formats served by Blizzard CDN servers via HTTP/HTTPS.
+
+### 2. CASC Formats (Local/Client)
+
+Formats created and managed by the Battle.net client on local storage.
+
+### 3. Shared Formats
+
+Formats used in both CDN and local contexts.
+
+## Component Documentation
+
+### Service Discovery
+
+Service discovery components handle version information, CDN endpoint discovery,
+and product configuration metadata:
+
+- [Ribbit Protocol](ribbit.md) - TCP-based discovery and version information API
+
+- [BPSV Format](bpsv.md) - Blizzard Pipe-Separated Values format for API
+responses
+
+### CDN Formats
+
+#### Configuration Files (Text)
+
+- [Build Config](config-formats.md#build-configuration) - Build-specific
+
+  settings (`/config/{hash}`)
+
+- [CDN Config](config-formats.md#cdn-configuration) - CDN server and archive
+
+  lists (`/config/{hash}`)
+
+- [Product Config](config-formats.md#product-configuration) - Product settings
+
+  and versions (`/config/{hash}`)
+
+- [Patch Config](config-formats.md#patch-configuration) - Differential patch
+
+  information (`/config/{hash}`)
+
+#### Content Files (Binary)
+
+Immutable, content-addressed files served from CDN:
+
+- [CDN Archives](archives.md) - BLTE containers with game content
+
+  (`/data/{prefix}/{hash}.archive`)
+
+- **CDN Indices** - Maps keys to archive locations
+(`/data/{prefix}/{hash}.index`)
+
+- [Encoding File](encoding.md) - Maps content to encoding keys
+(`/data/{prefix}/{hash}`)
+
+- [Root File](root.md) - Maps files to content keys (`/data/{prefix}/{hash}`)
+
+- [Install Manifest](install.md) - Installation requirements
+(`/data/{prefix}/{hash}`)
+
+- [Download Manifest](download.md) - Download priorities
+
+  (`/data/{prefix}/{hash}`)
+
+- [Patch Archives](patches.md) - Delta patches
+(`/patch/{prefix}/{hash}.archive`)
+
+- [Patch Indices](patches.md) - Patch archive index
+(`/patch/{prefix}/{hash}.index`)
+
+#### Modern Additions (WoW 8.2+)
+
+- [TVFS](tvfs.md) - Virtual file system manifest (via `vfs-*` fields in
+BuildConfig)
+
+### CASC Local Formats
+
+Client-side storage structures created and managed by Battle.net:
+
+#### Local Indices
+
+- **IDX Journal** - Bucket-based local index (`Data/indices/{bucket}.idx`)
+
+- **Archive Groups** - Combined archive index (client-generated optimization)
+
+- **Shadow Memory** - Memory-mapped cache (`Data/shmem`)
+
+#### Local Archives
+
+- **data.###** - Combined CDN archives (`Data/data/data.###`)
+
+- **patch.###** - Combined patch archives (`Data/patch/patch.###`)
+
+#### Local Configuration
+
+- **.build.info** - Local build configuration (root directory)
+
+- **DBCache** - Hotfix database cache (`Cache/ADB/*.bin`)
+
+### Shared Formats
+
+#### Container Formats
+
+- [BLTE Format](blte.md) - Block compression/encryption (all content storage)
+
+- [ESpec Format](espec.md) - Encoding specifications (compression definitions)
+
+#### Cryptographic
+
+- **MD5 Keys** - Content addressing (all key references)
+
+- [Salsa20 Encryption](salsa20.md) - Stream cipher (content protection)
+
+- **TACT Keys** - Key management (decryption keys)
+
+#### Supporting Systems
+
+- [CDN Architecture](cdn.md) - Content distribution network structure
+
+- [CDN Mirroring](mirroring.md) - Historical preservation strategies
+
+- **FileDataId** - Persistent file identification across builds
+
+## Format Relationships
+
+### CDN Download Flow
+
+```text
+Ribbit (BPSV) → Product Config → CDN Config → Build Config
+                                      ↓
+                              CDN Archives + Indices
+                                      ↓
+                              Encoding File → Root File
+                                      ↓
+                              Install/Download Manifests
+```
+
+### Content Resolution
+
+```text
+Filename/FileDataId → Root File → Content Key
+Content Key → Encoding File → Encoding Key + ESpec
+Encoding Key → CDN Index → Archive Location
+Archive Location → CDN Archive → BLTE Data
+BLTE Data → Decompression → Raw Content
+```
+
+## Implementation Notes
+
+### Key Format Discoveries
+
+1. **CDN Index Format**: Uses 20-byte footer with MD5 hashing, not 32-byte with
+Jenkins96
+2. **Entry Count**: Little-endian in CDN indices (exception to CASC big-endian
+convention)
+3. **Archive Groups**: Client-side optimization, not provided by CDN
+4. **Page Alignment**: CDN indices use 4KB pages for efficient memory management
+5. **Key Truncation**: Some formats use partial keys for space efficiency

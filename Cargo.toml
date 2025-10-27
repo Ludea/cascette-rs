@@ -1,41 +1,131 @@
 [workspace]
-members = [
-  "ngdp-bpsv",
-  "ngdp-cache",
-  "ngdp-cdn",
-  "ngdp-crypto",
-  "ribbit-client",
-  "tact-client",
-  "tact-parser",
-  "ngdp-client",
-  "blte",
-  "casc-storage", 
-  "ngdp-patch",
-]
 resolver = "2"
+members = [
+    "crates/cascette-formats",
+    "crates/cascette-crypto",
+    "crates/cascette-cache",
+    "crates/cascette-protocol",
+    "crates/cascette-client-storage",
+    "crates/cascette-import",
+    "crates/cascette-metadata",
+    "crates/cascette-installation",
+    "crates/cascette-cli",
+    "crates/cascette-agent",
+]
 
 [workspace.package]
-version = "0.4.3"
-authors = ["Daniel S. Reichenbach <daniel@kogit.network>"]
+version = "0.1.0"
+authors = ["Daniel S. Reichenbach <daniel@kogito.network>"]
 edition = "2024"
-rust-version = "1.86"
+rust-version = "1.86.0"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/wowemulation-dev/cascette-rs"
 homepage = "https://github.com/wowemulation-dev/cascette-rs"
 
 [workspace.dependencies]
-anyhow = "1.0"
-byteorder = "1.5"
-clap = "4.5"
-criterion = "0.7"
-dirs = "6.0"
-hex = "0.4.3"
-modular-bitfield = "0.12.0"
-rand = "0.9"
-serde = "1.0"
-tempfile = "3.20"
+# Error handling
 thiserror = "2.0"
-tokio = "1.47"
-toml = "0.8"
+anyhow = "1.0"
+
+# Binary format handling
+binrw = "0.15"
+
+# Utilities
+hex = "0.4"
+md5 = "0.8"
+rand = "0.9"
+dashmap = "6.1"
+
+# Compression
+flate2 = "1.1"
+lz4 = "1.28"
+
+# Async runtime
+tokio = { version = "1.47", features = ["full"] }
+async-trait = "0.1"
+
+# HTTP client for streaming
+reqwest = { version = "0.12", features = ["stream", "json"] }
+bytes = "1.10"
+futures = "0.3"
+
+# Metrics and monitoring
+prometheus = "0.14"
+
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serde
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CLI and security dependencies
+clap = { version = "4.5", features = ["derive", "env", "color"] }
+keyring = "3.6"
+base64 = "0.22"
+secrecy = { version = "0.10", features = ["serde"] }
+zeroize = { version = "1.8", features = ["derive"] }
+dirs = "5.0"
+ratatui = { version = "0.29", features = ["crossterm", "serde"] }
+crossterm = "0.28"
+num_cpus = "1.16"
+pbkdf2 = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+toml = "0.8"
+console = "0.15"
+dialoguer = "0.11"
+comfy-table = "7.1"
+indicatif = "0.17"
+rpassword = "7.4"
+whoami = "1.5"
+
+# Testing
+pretty_assertions = "1.4"
+tempfile = "3.21"
+proptest = "1.7"
+mockall = "0.13"
+criterion = { version = "0.7", features = ["html_reports"] }
+wiremock = "0.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+# missing_docs is set per-crate, not workspace-wide
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# Only the truly necessary allows
+module_name_repetitions = "allow"        # cascette_formats::formats is reasonable
+multiple_crate_versions = "allow"        # Dependencies may pull in multiple versions
+missing_errors_doc = "allow"             # Error types are self-documenting via thiserror
+missing_const_for_fn = "allow"           # Not all functions can be const in practice
+must_use_candidate = "allow"             # Not every pure function needs #[must_use]
+missing_panics_doc = "allow"             # Panics are often unreachable in practice
+too_many_lines = "allow"                 # Long functions are sometimes necessary
+cast_sign_loss = "allow"                 # Binary format parsing requires unsigned casts
+cast_possible_truncation = "allow"       # Binary format parsing requires size conversions
+option_if_let_else = "allow"             # Match can be clearer than map_or
+explicit_iter_loop = "allow"             # .iter() is sometimes more explicit
+type_complexity = "allow"                # Complex types sometimes needed for async
+significant_drop_tightening = "allow"    # Mutex/RwLock drops are intentional
+unchecked_duration_subtraction = "allow" # Duration math is safe in context
+unnecessary_map_or = "allow"             # Sometimes map_or is clearer
+suboptimal_flops = "allow"               # Floating-point optimizations not critical
+ignored_unit_patterns = "allow"          # _ is conventional for unit returns
+match_same_arms = "allow"                # Sometimes duplicate arms aid readability
+significant_drop_in_scrutinee = "allow"  # if let with mutex is intentional
+redundant_else = "allow"                 # else after return/continue is fine
+for_kv_map = "allow"                     # for (k, v) is clearer sometimes
+cast_precision_loss = "allow"            # f64 casts acceptable for benchmarks
+needless_pass_by_ref_mut = "allow"       # &mut self conventional for benches
+cast_lossless = "allow"                  # as casts are fine for numeric conversions
+uninlined_format_args = "allow"          # Format args don't always need inlining
+single_match_else = "allow"              # Sometimes match is clearer than if let
+unused_self = "allow"                    # &self can be for consistency even if unused

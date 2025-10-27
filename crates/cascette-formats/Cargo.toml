@@ -1,0 +1,63 @@
+[package]
+name = "cascette-formats"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "File format parsers and builders for NGDP/CASC system"
+readme = "README.md"
+keywords = ["ngdp", "casc", "blizzard", "warcraft", "bpsv"]
+categories = ["parser-implementations", "encoding", "game-development"]
+
+[dependencies]
+# Error handling
+thiserror = { workspace = true }
+
+# Binary format handling
+binrw = { workspace = true }
+
+# Utilities
+hex = { workspace = true }
+md5 = { workspace = true }
+
+# Compression
+flate2 = { workspace = true }
+lz4 = { workspace = true }
+
+# Internal dependencies
+cascette-crypto = { version = "0.1.0", path = "../cascette-crypto", features = ["keyring"] }
+
+# JSON parsing for product configs
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# Testing
+serde_json = { workspace = true }
+pretty_assertions = { workspace = true }
+walkdir = "2.5"
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+proptest = { workspace = true }
+mockall = { workspace = true }
+criterion = { workspace = true }
+tracing-subscriber = "0.3"
+
+# Visual reporting dependencies
+indicatif = "0.17"
+console = "0.15"
+tera = "1.19"
+base64 = "0.22"
+comfy-table = "7.1"
+crc32fast = "1.4"
+lz4_flex = "0.11"
+chrono = "0.4"
+rand = { workspace = true }
+
+[features]
+default = []
+
+[lints]
+workspace = true

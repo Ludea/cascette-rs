@@ -1,331 +1,153 @@
 # cascette-rs
 
-Rust implementation of Blizzard's NGDP (Next Generation Distribution Pipeline)
-for World of Warcraft emulation.
+Rust implementation of NGDP (Next Generation Distribution Pipeline) and CASC
+(Content Addressable Storage Container) for World of Warcraft.
 
 <div align="center">
 
 [![Discord](https://img.shields.io/discord/1394228766414471219?logo=discord&style=flat-square)](https://discord.gg/Q44pPMvGEd)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
-[![CI Status](https://github.com/wowemulation-dev/cascette-rs/workflows/CI/badge.svg)](https://github.com/wowemulation-dev/cascette-rs/actions)
-[![Crates.io Version](https://img.shields.io/crates/v/ngdp-client)](https://crates.io/crates/ngdp-client)
-[![docs.rs](https://img.shields.io/docsrs/ngdp-client)](https://docs.rs/ngdp-client)
 
 </div>
 
-## 🎯 Project Status
+## Project Status
 
-**Current Version**: 0.4.3
+cascette-rs implements Blizzard's NGDP/CASC system with core components
+implemented and tested.
 
 ### Core Components
 
-| Component       | Version | Status      | Description                                        |
-| --------------- | ------- | ----------- | -------------------------------------------------- |
-| `ngdp-bpsv`     | 0.4.3   | ✅ Stable   | BPSV parser/writer for NGDP formats                |
-| `ribbit-client` | 0.4.3   | ✅ Stable   | Ribbit protocol client with signature verification |
-| `tact-client`   | 0.4.3   | ✅ Stable   | TACT HTTP client with retry logic and batching     |
-| `tact-parser`   | 0.4.3   | ✅ Stable   | TACT file format parser (encoding, install, etc.) |
-| `ngdp-cdn`      | 0.4.3   | ✅ Stable   | CDN client with fallback hosts and connection pooling |
-| `ngdp-cache`    | 0.4.3   | ✅ Stable   | Comprehensive caching layer with LRU eviction     |
-| `blte`          | 0.4.3   | ✅ Stable   | BLTE decompression with memory pooling            |
-| `ngdp-crypto`   | 0.4.3   | ✅ Stable   | Modern encryption with Salsa20 and key service    |
-| `ngdp-client`   | 0.4.3   | ✅ Stable   | CLI tool for NGDP operations                      |
-| `casc-storage`  | 0.4.3   | 🚧 Beta     | CASC storage implementation (in development)      |
-| `ngdp-patch`    | 0.4.3   | 🚧 Beta     | Patch file support (in development)               |
+**Major Components Implemented:**
 
-### Implementation Progress
+- **cascette-formats** - Binary format parsers and builders for NGDP/CASC
+formats
+- **cascette-crypto** - Cryptographic operations (MD5, Jenkins96,
+  Salsa20, ARC4, TACT keys)
+- **cascette-protocol** - NGDP protocol client with automatic fallback
+- **cascette-cache** - Multi-layer caching system
+- **cascette-client-storage** - Local CASC storage with shared memory IPC
 
-- ✅ **Version Discovery**: HTTP-first approach with HTTPS endpoints, Ribbit fallback
-  for compatibility
-- ✅ **TACT Protocol**: HTTP/HTTPS clients for version and CDN queries with retry
-  logic
-- ✅ **BPSV Format**: Parser and builder with zero-copy optimizations
-- ✅ **TACT Parsers**: Support for encoding, install, download, size, build config,
-  TVFS
-- ✅ **BLTE Decompression**: Compression modes (ARC4/Frame deprecated in v0.4.0)
-- ✅ **Encryption**: Salsa20 cipher with key management (ARC4 deprecated)
-- ✅ **CDN Operations**: Parallel downloads, streaming, retry logic, rate limiting
-- ✅ **Caching**: HTTP-first caching with fallbacks and TTL support
-- ✅ **Install Command**: Client installation with .build.info generation for restoration
-- ✅ **Build Config**: Uncompressed handling and download order (encoding before manifests)
-- 🚧 **CASC Storage**: Local storage implementation (in development)
-- 🔄 **TVFS**: Parser implemented, needs real-world data testing
+**Quality Assurance:**
 
-## 🚀 Quick Start
+- unit tests across all components
+- Integration tests for cross-component validation
+- Code quality enforcement with Clippy
+- Round-trip validation for binary formats
+- Tested with actual WoW installations
 
-### Library Usage
+### Application Development
 
-Add to your `Cargo.toml`:
+Core infrastructure supports user-facing applications:
 
-```toml
-[dependencies]
-ribbit-client = "0.4.3"
-ngdp-bpsv = "0.4.3"
-tact-parser = "0.4.3"
-blte = "0.4.3"
-ngdp-crypto = "0.4.3"
-```
+**Applications:**
 
-Basic example (HTTP-first approach):
+- **cascette-cli** - Command-line interface (in development)
+- **cascette-agent** - Background service (planned)
+- **cascette-launcher** - GUI application (planned)
 
-```rust
-use ngdp_cache::hybrid_version_client::HybridVersionClient;
-use ribbit_client::Region;
+## Documentation
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a hybrid client (HTTP primary, Ribbit fallback)
-    let client = HybridVersionClient::new(Region::US).await?;
+### [NGDP/CASC Documentation](docs/README.md)
 
-    // Request WoW versions with HTTPS endpoints
-    let versions = client.get_product_versions("wow").await?;
+Specifications for NGDP/CASC components:
 
-    // Print version information
-    for entry in &versions.entries {
-        println!(
-            "{}: {} (build {})",
-            entry.region, entry.versions_name, entry.build_id
-        );
-    }
+- **Core Formats**
+  - [BLTE Format](docs/blte.md) - Block Table Encoded compression (N, Z, E, F
+modes)
+  - [Encoding](docs/encoding.md) - Content-to-encoding key mapping
+  - [Root](docs/root.md) - File manifest (versions 1-4)
+  - [Install](docs/install.md) - Installation manifest and tags
+  - [Download](docs/download.md) - Download priority and platform tags
+  - [TVFS](docs/tvfs.md) - Virtual file system format
+- **Service Discovery**
+  - [Ribbit Protocol](docs/ribbit.md) - TCP/HTTP/HTTPS discovery API
+  - [BPSV Format](docs/bpsv.md) - Blizzard Pipe-Separated Values
+- **Content Delivery**
+  - [CDN Architecture](docs/cdn.md) - Content delivery network structure
+  - [Configuration Formats](docs/config-formats.md) - Build, CDN,
+    Product, Patch configs
 
-    Ok(())
-}
-```
+  - [Patches](docs/patches.md) - Patch system and ZBSDIFF1 format
+  - [ESpec](docs/espec.md) - Encoding specification for patches
+- **Security & Distribution**
+  - [Salsa20](docs/salsa20.md) - Stream cipher encryption
+  - [Mirroring](docs/mirroring.md) - Content mirroring methods
+- **Analysis & Evolution**
+  - [Format Transitions](docs/format-transitions.md) - Format changes
+    by version
 
-## 🧪 Testing with Real WoW Data
+## Related Projects
 
-Many tests and examples can work with real WoW installation data for comprehensive
-testing. This is optional - all tests will skip gracefully if no data is available.
+### [cascette-py](https://github.com/wowemulation-dev/cascette-py)
 
-### Setup Environment Variables
+Python development and learning playground for NGDP/CASC:
 
-Set environment variables pointing to your WoW installation Data directories:
+- Format analysis and prototyping tools
+- BLTE decompression implementation
+- Wago.tools integration (1,900+ WoW builds database)
+- Format examination and verification utilities
+- Reference implementations for format parsing
 
-```bash
-# Classic Era (1.15.x)
-export WOW_CLASSIC_ERA_DATA="$HOME/Downloads/wow/1.15.2.55140.windows-win64/Data"
+The Python project serves as a prototyping environment for understanding
+NGDP/CASC formats before implementing them in Rust.
 
-# Classic with expansions
-export WOW_CLASSIC_DATA="$HOME/Downloads/wow/classic/Data"
+## Development
 
-# Retail (current)
-export WOW_RETAIL_DATA="$HOME/Downloads/wow/retail/Data"
-```
+### Prerequisites
 
-### Valid Data Directory Structure
+- Rust 1.86+ (MSRV)
+- Rust 2024 edition
 
-The Data directory should contain CASC structure:
-
-```
-Data/
-├── data/          # CASC archive files (required)
-├── indices/       # CASC index files
-├── config/        # CASC configuration files
-└── ...
-```
-
-### Running Tests with Real Data
+### Building
 
 ```bash
-# Run all tests (will skip those requiring WoW data if not available)
-cargo test
-
-# Run specific integration tests
-cargo test -p casc-storage --test real_data_integration
-
-# Run examples that use real data
-cargo run -p casc-storage --example list_casc_files
-```
-
-Tests and examples will automatically:
-
-- Use environment variables when available
-- Fall back to common installation paths
-- Skip gracefully with helpful setup instructions if no data found
-- Work in CI environments without WoW data
-
-## 📦 Installation
-
-### CLI Tool
-
-#### Install with Cargo
-
-```bash
-cargo install ngdp-client
-```
-
-#### Install with Script (Unix/Linux/macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.sh | bash
-```
-
-#### Install with Script (Windows PowerShell)
-
-```powershell
-irm https://raw.githubusercontent.com/wowemulation-dev/cascette-rs/main/install.ps1 | iex
-```
-
-### Library Usage
-
-```bash
-cargo add ribbit-client ngdp-bpsv tact-client tact-parser ngdp-cdn ngdp-cache blte ngdp-crypto
-```
-
-### From source
-
-```bash
-git clone https://github.com/wowemulation-dev/cascette-rs
+# Clone the repository
+git clone https://github.com/wowemulation-dev/cascette-rs.git
 cd cascette-rs
-cargo build --release
-# CLI binary will be at target/release/ngdp
+
+# Build workspace
+cargo build --workspace
+
+# Run tests
+cargo test --workspace
+
+# Check code quality
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-## 🖥️ CLI Usage
-
-The `ngdp-client` provides a comprehensive command-line interface for NGDP operations:
-
-### Install Game Clients
+### Analysis Tools Setup
 
 ```bash
-# Install WoW Classic Era (minimal installation)
-ngdp install game wow_classic_era --install-type minimal --path ./wow-client
+# Navigate to tools directory
+cd tools
 
-# Full installation with verification
-ngdp install game wow --install-type full --verify --path ./wow-retail
+# Fetch build database (requirements.txt not needed - only uses
+# requests)
+python fetch_wago_builds.py
 
-# Dry-run to see what would be installed
-ngdp install game wow_classic --install-type minimal --dry-run --path ./test
+# Verify tools are working
+python test_all_tools.py
+
+# Run verification
+python run_format_verification.py
 ```
 
-### Version and CDN Information
+### Contributing
 
-```bash
-# Query product versions (uses HTTPS endpoints)
-ngdp query versions wow
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution process
+- [CONTRIBUTORS.md](CONTRIBUTORS.md) - Contributors list
 
-# Get CDN configuration
-ngdp query cdns wow
-
-# Inspect build configurations
-ngdp inspect build-config <hash>
-```
-
-### BPSV and File Analysis
-
-```bash
-# Parse and display BPSV files
-ngdp inspect bpsv ./file.bpsv
-
-# Analyze BLTE files
-ngdp inspect blte ./encrypted.blte
-```
-
-All commands support multiple output formats (`--format json|text|bpsv`) and the install command automatically creates `.build.info` files for client restoration.
-
-## 📚 Documentation
-
-- [BPSV Format Specification](docs/bpsv-format.md)
-- [BPSV Examples](ngdp-bpsv/examples)
-- [Ribbit Protocol](docs/ribbit-protocol.md)
-- [Ribbit Examples](ribbit-client/examples)
-- [TACT Protocol](docs/tact-protocol.md)
-
-## 📚 Online References
-
-- [TACT Reference](https://wowdev.wiki/TACT)
-- [Ribbit Reference](https://wowdev.wiki/Ribbit)
-- [CASC Reference](https://wowdev.wiki/CASC)
-
-## 🔧 Features
-
-### Complete
-
-- **BPSV Parser/Writer** (`ngdp-bpsv`)
-  - ✅ BPSV format support with zero-copy parsing
-  - ✅ Type-safe field definitions (STRING, HEX, DEC)
-  - ✅ Schema validation and sequence number handling
-  - ✅ Builder pattern for document creation
-  - ✅ Round-trip compatibility
-
-- **Ribbit Protocol Client** (`ribbit-client`)
-  - ✅ Blizzard regions (US, EU, CN, KR, TW, SG)
-  - ✅ V1 (MIME) and V2 (raw) protocol support
-  - ✅ Typed API for all endpoints
-  - ✅ PKCS#7/CMS signature verification
-  - ✅ Certificate and OCSP support
-  - ✅ Retry with exponential backoff
-  - ✅ DNS caching for performance
-
-- **TACT HTTP Client** (`tact-client`)
-  - ✅ Version and CDN configuration queries
-  - ✅ Support for V1 (port 1119) and V2 (HTTPS) protocols
-  - ✅ Typed response parsing
-  - ✅ Retry handling
-  - ✅ Blizzard regions supported
-
-- **CDN Content Delivery** (`ngdp-cdn`)
-  - ✅ Parallel downloads with progress tracking
-  - ✅ Streaming operations for large files
-  - ✅ Retry with rate limit handling
-  - ✅ Content verification
-  - ✅ Configurable connection pooling
-  - ✅ Fallback to backup CDN servers
-  - ✅ Support for community mirrors (arctium.tools, reliquaryhq.com)
-
-- **Caching Layer** (`ngdp-cache`)
-  - ✅ Transparent caching for all NGDP operations
-  - ✅ TTL-based expiration policies
-  - ✅ Streaming I/O for memory efficiency
-  - ✅ CDN-compatible directory structure
-  - ✅ Batch operations for performance
-
-- **TACT File Parsers** (`tact-parser`)
-  - ✅ Encoding files (CKey ↔ EKey mapping)
-  - ✅ Install manifests with tag-based filtering
-  - ✅ Download manifests with priority sorting
-  - ✅ Size files for installation calculations
-  - ✅ Build configurations (key-value format)
-  - ✅ TVFS (TACT Virtual File System)
-  - ✅ 40-bit integer and varint support
-
-- **BLTE Decompression** (`blte`)
-  - ✅ Compression modes (None, ZLib, LZ4, Frame, Encrypted)
-  - ✅ Multi-chunk file support
-  - ✅ Checksum verification
-  - ✅ Integration with ngdp-crypto for encrypted blocks
-  - ✅ Memory processing
-
-- **Encryption Support** (`ngdp-crypto`)
-  - ✅ Salsa20 stream cipher (WoW encryption)
-  - ✅ ARC4/RC4 cipher (legacy content)
-  - ✅ Key management and loading
-  - ✅ Multiple key file formats (CSV, TXT, TSV)
-  - ✅ TACTKeys repository integration
-
-- **CLI Tool** (`ngdp-client`)
-  - ✅ Product queries and version information
-  - ✅ Certificate operations
-  - ✅ BPSV inspection and build config analysis
-  - ✅ Encryption key management commands
-  - ✅ Inspect commands with BLTE support
-  - ✅ Multiple output formats (text, JSON, BPSV)
-  - ✅ Terminal formatting
-
-## 🤝 Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-Special thanks to the WoW emulation community and the documentation efforts at
-[wowdev.wiki](https://wowdev.wiki).
-
-## 📄 License
+## License
 
 This project is dual-licensed under either:
 
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or
+  <http://opensource.org/licenses/MIT>)
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 
@@ -337,6 +159,6 @@ dual licensed as above, without any additional terms or conditions.
 
 ---
 
-**Note**: This project is not affiliated with or endorsed by Blizzard Entertainment.
-It is an independent implementation based on reverse engineering efforts by the
-community for educational and preservation purposes.
+**Note**: This project is not affiliated with Blizzard Entertainment. It is
+an independent implementation based on reverse engineering by the World of
+Warcraft emulation community.

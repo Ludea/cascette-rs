@@ -1,0 +1,46 @@
+[package]
+name = "cascette-metadata"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Content metadata orchestration layer for NGDP/CASC pipeline"
+repository = "https://github.com/wowemulation-dev/cascette-rs"
+readme = "README.md"
+keywords = ["ngdp", "casc", "metadata", "blizzard", "orchestration"]
+categories = ["games", "parser-implementations"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+# Workspace dependencies
+thiserror = { workspace = true }
+
+# External dependencies
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+tokio = { version = "1.0", features = ["sync", "time", "rt", "fs"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Internal dependencies
+cascette-crypto = { path = "../cascette-crypto", features = ["file-store"] }
+cascette-import = { path = "../cascette-import", optional = true }
+
+# Additional dependencies for cache
+bincode = "2.0"
+flate2 = "1.0"
+dirs = "5.0"
+hex = { workspace = true }
+
+[features]
+default = []
+import = ["cascette-import"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

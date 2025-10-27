@@ -17,3 +17,16 @@ Thumbs.db
 
 # Added by cargo
 /target/
+
+# Private reference documentation
+/docs-internal/
+
+# Agent service artifacts
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.log.*
+agent.toml
+.env
+.env.*

@@ -30,11 +30,6 @@ targets = [
   # particular target. target_features are currently not validated against
   # the actual valid features supported by the target architecture.
   #{ triple = "wasm32-unknown-unknown", features = ["atomics"] },
-  { triple = "x86_64-unknown-linux-gnu" },
-  { triple = "x86_64-unknown-linux-musl" },
-  { triple = "x86_64-pc-windows-msvc" },
-  { triple = "x86_64-apple-darwin" },
-  { triple = "aarch64-apple-darwin" },
 ]
 # When creating the dependency graph used as the source of truth when checks are
 # executed, this field can be used to prune crates from the graph, removing them
@@ -75,7 +70,14 @@ feature-depth = 1
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
-  { id = "RUSTSEC-2023-0071", reason = "RSA timing attack vulnerability - only used for Ribbit signature verification in network context where timing attacks are not feasible" },
+  # RSA timing attack - acceptable for NGDP signature verification use case
+  # The RSA crate is only used for signature verification of Blizzard's certificates
+  # in a non-adversarial context where timing attacks are not a practical concern
+  { id = "RUSTSEC-2023-0071", reason = "RSA only used for Blizzard certificate verification, timing attacks not a concern in this context" },
+
+  # Instant crate unmaintained - used only in dev/test dependencies
+  # Acceptable for development and testing purposes where security is less critical
+  { id = "RUSTSEC-2024-0384", reason = "Used only in dev dependencies for testing, not in production code" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.
@@ -94,12 +96,13 @@ allow = [
   "MIT",
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
+  "Unicode-3.0",
   "BSD-3-Clause",
   "ISC",
-  "Unicode-3.0",
   "0BSD",
-  "MPL-2.0",
   "CDLA-Permissive-2.0",
+  "MPL-2.0",
+  "Zlib",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the

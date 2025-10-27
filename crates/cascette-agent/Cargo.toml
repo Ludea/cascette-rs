@@ -1,0 +1,80 @@
+[package]
+name = "cascette-agent"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Battle.net Agent service for managing game installations"
+keywords = ["blizzard", "battlenet", "agent", "service", "games"]
+categories = ["game-development", "web-programming"]
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "cascette-agent"
+path = "src/main.rs"
+
+[dependencies]
+# Internal cascette crates
+cascette-installation = { path = "../cascette-installation" }
+cascette-protocol = { path = "../cascette-protocol" }
+
+# HTTP server
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "timeout", "compression-full"] }
+
+# Async runtime
+tokio.workspace = true
+tokio-util = "0.7"
+async-trait.workspace = true
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Utilities
+uuid = { version = "1.0", features = ["v4", "serde"] }
+futures.workspace = true
+bytes.workspace = true
+chrono = { version = "0.4", features = ["serde"] }
+shellexpand = "3.1"
+
+# Configuration
+toml.workspace = true
+dirs.workspace = true
+
+# Observability - Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Observability - Distributed Tracing
+opentelemetry = "0.26"
+opentelemetry-otlp = { version = "0.26", features = ["grpc-tonic", "trace"] }
+opentelemetry_sdk = { version = "0.26", features = ["rt-tokio", "trace"] }
+tracing-opentelemetry = "0.27"
+
+# Observability - Metrics
+prometheus-client = "0.22"
+
+[dev-dependencies]
+tempfile.workspace = true
+pretty_assertions.workspace = true
+wiremock.workspace = true
+proptest.workspace = true
+
+# Integration test dependencies
+reqwest = { version = "0.12", features = ["json"] }
+walkdir = "2.4"
+nix = { version = "0.29", features = ["signal"] }
