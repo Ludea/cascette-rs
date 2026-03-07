@@ -425,7 +425,7 @@ async fn test_post_and_get_session() {
         .method(Method::POST)
         .uri("/gamesession/wow")
         .header("content-type", "application/json")
-        .body(Body::from(r#"{}"#))
+        .body(Body::from("{}"))
         .unwrap();
     let resp = router.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);

@@ -230,6 +230,7 @@ pub async fn get_product_override_state(
             .cloned()
             .collect::<Vec<_>>();
         let vsu = cfg.version_server_url_override.clone();
+        drop(cfg);
         (patch, vsu)
     };
 

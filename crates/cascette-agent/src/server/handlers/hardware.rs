@@ -34,21 +34,17 @@ pub async fn get_hardware() -> Json<serde_json::Value> {
     // only populates this via CPUID on Windows.
     let cpu_vendor = String::new();
     // cpu_speed: frequency in MHz from sysinfo, or 0 if unavailable.
-    let cpu_speed: u64 = sys.cpus().first().map_or(0, |c| c.frequency());
+    let cpu_speed: u64 = sys.cpus().first().map_or(0, sysinfo::Cpu::frequency);
     // cpu_arch: Agent.exe uses an enum (0=x86, 1=x64, etc.).
     // We emit 1 for x86_64 (the only arch cascette targets) to match the
     // typical value a Battle.net launcher would see on a 64-bit install.
-    let cpu_arch: u32 = if std::env::consts::ARCH == "x86_64" {
-        1
-    } else {
-        0
-    };
+    let cpu_arch: u32 = u32::from(std::env::consts::ARCH == "x86_64");
 
     let memory: u64 = sys.total_memory();
 
     // GPU detection: best-effort, may return empty string.
     let gpu_name = detect_gpu_name();
-    let num_gpus: u32 = if gpu_name.is_empty() { 0 } else { 1 };
+    let num_gpus: u32 = u32::from(!gpu_name.is_empty());
 
     // Agent.exe supports up to 3 GPUs (gpu_1, gpu_2, gpu_3).
     // We populate gpu_1 if detection succeeded; gpu_2 and gpu_3 are empty objects.
@@ -304,6 +300,7 @@ fn windows_gpu_name() -> Option<String> {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

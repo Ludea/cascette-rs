@@ -1,4 +1,5 @@
 //! POST /admin -- admin session management (conditional registration).
+//!
 //! POST /admin_command -- admin command dispatch (requires --allowcommands).
 //! GET/POST /gce_state -- Game Client Events state for battle.net product.
 //! POST /createshortcut -- desktop shortcut creation (Windows-specific).

@@ -390,6 +390,7 @@ mod tests {
 
     // --- ChainedKeyProvider tests ---
 
+    #[allow(clippy::unnecessary_box_returns)]
     fn make_store_with(keys: &[(u64, [u8; 16])]) -> Box<TestKeyStore> {
         let mut store = TestKeyStore::new();
         for &(id, key) in keys {

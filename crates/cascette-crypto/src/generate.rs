@@ -67,6 +67,7 @@ pub fn generate_salsa20_iv() -> Result<[u8; 8], CryptoError> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

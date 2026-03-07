@@ -143,7 +143,7 @@ mod tests {
                 region: Some("us".to_string()),
                 build_config: Some("build-key-123".to_string()),
             }],
-            decryption_key: Some("".to_string()),
+            decryption_key: Some(String::new()),
             completed_install_actions: vec!["action1".to_string(), "action2".to_string()],
             ..Default::default()
         };
