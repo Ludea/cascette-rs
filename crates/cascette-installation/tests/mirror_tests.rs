@@ -194,7 +194,7 @@ fn no_community_mirrors_only_official() {
 fn no_community_mirrors_historic_still_only_official() {
     let official = vec![make_official_endpoint("blzddist1-a.akamaihd.net")];
     let config = MirrorConfig {
-        official: official.clone(),
+        official,
         use_community_mirrors: false,
         is_historic: true,
     };
@@ -286,8 +286,10 @@ fn empty_official_with_mirrors_gives_mirror_count() {
 fn backoff_server_error_heavier_than_auth_range() {
     use cascette_installation::mirror::backoff;
 
-    assert!(
-        backoff::SERVER_ERROR_MULTIPLIER > backoff::AUTH_RANGE_MULTIPLIER,
-        "Server errors (5xx) must penalize more heavily than auth/range errors"
-    );
+    const {
+        assert!(
+            backoff::SERVER_ERROR_MULTIPLIER > backoff::AUTH_RANGE_MULTIPLIER,
+            "Server errors (5xx) must penalize more heavily than auth/range errors"
+        );
+    }
 }

@@ -11,6 +11,7 @@
 
 use cascette_crypto::TactKeyProvider;
 use cascette_crypto::keys::TactKeyStore;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 // --- TACT key loading via TactKeyStore (crypto crate, no network needed) ---
@@ -264,7 +265,7 @@ fn tactkeys_large_file_parse() {
             k[8..16].copy_from_slice(&(i ^ 0xFF).to_le_bytes());
             k
         };
-        content.push_str(&format!("{id:016X} {}\n", hex::encode_upper(key)));
+        writeln!(content, "{id:016X} {}", hex::encode_upper(key)).unwrap();
         expected_count += 1;
     }
 

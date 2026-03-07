@@ -16,6 +16,10 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- tests: resolve five clippy violations across integration test files
+  (`format_push_string`, `needless_collect`, `redundant_clone`,
+  `assertions_on_constants`); update `test_resolve_metadata_with_overrides`
+  assertion to match the prepend behavior introduced in the prior fix
 - cascette-agent: CDN override hosts are now prepended to Ribbit-advertised
   endpoints instead of replacing them; both standard and historical installs use
   the same fallback chain (overrides → community mirrors → official CDN)

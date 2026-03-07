@@ -237,9 +237,8 @@ async fn bootstrap_versions_then_cdns() {
         cdn_path.starts_with("tpr/"),
         "CDN path must start with tpr/"
     );
-    let hosts: Vec<&str> = hosts_field.split_whitespace().collect();
     assert!(
-        hosts.len() >= 2,
+        hosts_field.split_whitespace().count() >= 2,
         "Must have at least 2 CDN hosts for failover"
     );
 }

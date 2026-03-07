@@ -178,9 +178,8 @@ fn bpsv_cdns_hosts_have_multiple_entries() {
         let hosts = row
             .get_raw(2)
             .unwrap_or_else(|| panic!("Row {i} missing Hosts"));
-        let host_list: Vec<&str> = hosts.split_whitespace().collect();
         assert!(
-            host_list.len() >= 2,
+            hosts.split_whitespace().count() >= 2,
             "Row {i} should have at least 2 CDN hosts for failover"
         );
     }
