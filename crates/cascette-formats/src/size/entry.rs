@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn test_reject_reserved_key_hash_0x0000() {
         let header = v1_header(4);
-        let data = make_entry_bytes(&vec![0xAA; 9], 0x0000, 100, 4);
+        let data = make_entry_bytes(&[0xAA; 9], 0x0000, 100, 4);
         let result = SizeEntry::read_entry(&mut data.as_slice(), &header);
         assert!(matches!(result, Err(SizeError::InvalidKeyHash(0x0000))));
     }
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn test_reject_reserved_key_hash_0xffff() {
         let header = v1_header(4);
-        let data = make_entry_bytes(&vec![0xAA; 9], 0xFFFF, 100, 4);
+        let data = make_entry_bytes(&[0xAA; 9], 0xFFFF, 100, 4);
         let result = SizeEntry::read_entry(&mut data.as_slice(), &header);
         assert!(matches!(result, Err(SizeError::InvalidKeyHash(0xFFFF))));
     }
