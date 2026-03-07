@@ -56,7 +56,7 @@ use crate::cdn::streaming::{
     error::InputValidator,
     path::{CdnUrlBuilder, ContentType},
 };
-use cascette_crypto::TactKeyStore;
+use cascette_crypto::{TactKeyProvider, TactKeyStore};
 use cascette_formats::archive::ArchiveGroup;
 
 use tracing::{debug, info};
@@ -330,7 +330,12 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
             // Extract content from this archive
             let archive_results = self
                 .archive_reader
-                .extract_multiple(&archive_url, extraction_requests, &index, key_store)
+                .extract_multiple(
+                    &archive_url,
+                    extraction_requests,
+                    &index,
+                    key_store.map(|ks| ks as &dyn TactKeyProvider),
+                )
                 .await?;
 
             // Convert to final result format
@@ -370,7 +375,12 @@ impl<H: HttpClient + Clone> StreamingCdnResolver<H> {
 
         let extraction_result = self
             .archive_reader
-            .extract_by_key(&archive_url, encoding_key, &index, key_store)
+            .extract_by_key(
+                &archive_url,
+                encoding_key,
+                &index,
+                key_store.map(|ks| ks as &dyn TactKeyProvider),
+            )
             .await?;
 
         Ok(ContentResolutionResult {
