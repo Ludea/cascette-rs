@@ -2,7 +2,11 @@
 //!
 //! Run with: `cargo run --example armadillo_keys -p cascette-crypto`
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::uninlined_format_args)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::uninlined_format_args
+)]
 
 use cascette_crypto::armadillo::{parse_ak_file, parse_hex_key, write_ak_file};
 use cascette_crypto::{ChainedKeyProvider, TactKey, TactKeyProvider, TactKeyStore};
