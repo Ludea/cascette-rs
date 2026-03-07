@@ -242,7 +242,8 @@ fn test_parse_with_invalid_data_returns_checksum_error() {
 
 ## Running Tests
 
-This project uses [cargo-nextest](https://nexte.st/) for faster, parallel test execution with better output formatting.
+This project uses [cargo-nextest](https://nexte.st/) for faster, parallel test
+execution with better output formatting.
 
 ### Basic Commands
 
@@ -383,7 +384,9 @@ cargo nextest-integration  # Integration tests only
 
 ### Flamegraphs
 
-The project supports flamegraph generation using [cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph). Flamegraphs help visualize CPU time spent in different functions during execution.
+The project supports flamegraph generation using
+[cargo-flamegraph](https://github.com/flamegraph-rs/flamegraph). Flamegraphs
+help visualize CPU time spent in different functions during execution.
 
 #### Generating Flamegraphs Locally
 
