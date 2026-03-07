@@ -98,10 +98,10 @@ async fn test_get_hardware() {
 
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
-    assert!(json["cpu"]["count"].is_number());
-    assert!(json["memory"]["total_bytes"].is_number());
-    assert!(json["os"]["arch"].is_string());
-    assert!(json["gpu"].is_object());
+    assert!(json["cpu_num_cores"].is_number());
+    assert!(json["memory"].is_number());
+    assert!(json["cpu_arch"].is_number());
+    assert!(json["gpu_1"].is_object());
 }
 
 #[tokio::test]

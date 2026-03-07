@@ -201,7 +201,7 @@ mod tests {
 
         // 0.9^5.0 ≈ 0.59049
         let score = scorer.score("bad-host");
-        assert!((score - 0.9_f64.powf(5.0)).abs() < 0.001);
+        assert!((score - 0.9_f64.powi(5)).abs() < 0.001);
         assert!(scorer.has_failures());
 
         // Good host unaffected
@@ -219,7 +219,7 @@ mod tests {
 
         // 3 failures × weight 1.0 = 3.0 total → 0.9^3 = 0.729
         let score = scorer.score("host-a");
-        assert!((score - 0.9_f64.powf(3.0)).abs() < 0.001);
+        assert!((score - 0.9_f64.powi(3)).abs() < 0.001);
     }
 
     #[test]
