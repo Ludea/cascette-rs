@@ -20,14 +20,13 @@
 //! |--------|------|-------|-------------|
 //! | 0-1 | 2 | magic | "DS" (0x44, 0x53) |
 //! | 2 | 1 | version | 1 or 2 |
-//! | 3 | 1 | ekey_size | Encoding key bytes per entry (typically 9) |
+//! | 3 | 1 | key_size_bits | Encoding key size in **bits** (e.g. 72 = 9 bytes) |
 //! | 4-7 | 4 | entry_count | Number of file entries |
 //! | 8-9 | 2 | tag_count | Number of tags between header and entries |
 //!
 //! ## Entry Layout
 //!
-//! Each entry is `ekey[ekey_size] + esize[esize_bytes]` bytes, with no
-//! additional fields.
+//! Each entry is `key[ekey_size bytes] + null(1) + key_hash(2 BE) + esize[esize_bytes BE]`.
 //!
 //! ## Binary Layout
 //!
@@ -45,9 +44,9 @@
 //! // Build a size manifest
 //! let manifest = SizeManifestBuilder::new()
 //!     .version(2)
-//!     .ekey_size(9)
-//!     .add_entry(vec![0xAA; 9], 1024)
-//!     .add_entry(vec![0xBB; 9], 2048)
+//!     .key_size_bits(72)
+//!     .add_entry(vec![0xAA; 9], 0x0001, 1024)
+//!     .add_entry(vec![0xBB; 9], 0x0002, 2048)
 //!     .build()?;
 //!
 //! // Serialize to bytes
@@ -89,9 +88,9 @@ mod tests {
     fn test_re_exports_accessible() {
         // Verify all public types are accessible through the module re-exports
         let _ = SizeManifestBuilder::new();
-        let header = SizeHeader::new_v2(9, 0, 0, 0);
+        let header = SizeHeader::new_v2(72, 0, 0, 0);
         assert_eq!(header.version(), 2);
-        let entry = SizeEntry::new(vec![0x00; 9], 100);
+        let entry = SizeEntry::new(vec![0x00; 9], 0x0001, 100);
         assert_eq!(entry.esize, 100);
     }
 
@@ -100,9 +99,9 @@ mod tests {
         // Build -> serialize -> parse round-trip
         let manifest = SizeManifestBuilder::new()
             .version(1)
-            .ekey_size(9)
-            .add_entry(vec![0xAA; 9], 500)
-            .add_entry(vec![0xBB; 9], 700)
+            .key_size_bits(72)
+            .add_entry(vec![0xAA; 9], 0x0001, 500)
+            .add_entry(vec![0xBB; 9], 0x0002, 700)
             .build()
             .expect("Should build manifest");
 

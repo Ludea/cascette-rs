@@ -22,13 +22,19 @@ pub enum SizeError {
         actual: usize,
     },
 
-    /// Invalid esize byte width in V1 header (must be 1-8)
+    /// Invalid esize byte width in V1 header (must be 0-8)
     #[error("Invalid eSize byte count '{0}' in size manifest header")]
     InvalidEsizeWidth(u8),
 
-    /// Invalid EKey size (must be 1-16)
-    #[error("Invalid ekey_size: must be 1-16, got {0}")]
+    /// Invalid key_size_bits value (must produce 1-16 byte keys)
+    #[error("Invalid key_size_bits: must be 1-128 (1-16 bytes), got {0}")]
     InvalidEKeySize(u8),
+
+    /// Invalid key hash in entry (0x0000 and 0xFFFF are reserved sentinel values).
+    ///
+    /// These values are rejected with error code 8.
+    #[error("Invalid key hash 0x{0:04X}: values 0x0000 and 0xFFFF are reserved")]
+    InvalidKeyHash(u16),
 
     /// Entry count mismatch between header and parsed entries
     #[error("Entry count mismatch: header says {expected}, found {actual}")]

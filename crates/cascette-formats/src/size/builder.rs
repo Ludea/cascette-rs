@@ -13,9 +13,10 @@ use crate::size::manifest::SizeManifest;
 /// the derived header fields (total_size, entry_count) at build time.
 pub struct SizeManifestBuilder {
     version: u8,
-    ekey_size: u8,
+    key_size_bits: u8,
     tag_count: u16,
     esize_bytes: u8,
+    total_size_override: Option<u64>,
     tags: Vec<SizeTag>,
     entries: Vec<SizeEntry>,
 }
@@ -23,14 +24,15 @@ pub struct SizeManifestBuilder {
 impl SizeManifestBuilder {
     /// Create a new builder with default settings
     ///
-    /// Defaults: version 2, ekey_size 9, tag_count 0, esize_bytes 4
+    /// Defaults: version 2, key_size_bits 72 (9-byte keys), tag_count 0, esize_bytes 4
     #[must_use]
     pub fn new() -> Self {
         Self {
             version: 2,
-            ekey_size: 9,
+            key_size_bits: 72, // 72 bits = 9 bytes
             tag_count: 0,
             esize_bytes: 4,
+            total_size_override: None,
             tags: Vec::new(),
             entries: Vec::new(),
         }
@@ -43,10 +45,12 @@ impl SizeManifestBuilder {
         self
     }
 
-    /// Set the encoding key size in bytes (1-16, typically 9)
+    /// Set the key size in **bits** (e.g. 72 for 9-byte keys, 128 for 16-byte keys)
+    ///
+    /// The byte count used for on-disk storage is `(key_size_bits + 7) >> 3`.
     #[must_use]
-    pub fn ekey_size(mut self, size: u8) -> Self {
-        self.ekey_size = size;
+    pub fn key_size_bits(mut self, bits: u8) -> Self {
+        self.key_size_bits = bits;
         self
     }
 
@@ -64,6 +68,17 @@ impl SizeManifestBuilder {
     #[must_use]
     pub fn esize_bytes(mut self, width: u8) -> Self {
         self.esize_bytes = width;
+        self
+    }
+
+    /// Set the total_size field explicitly
+    ///
+    /// When `esize_bytes` is 0, entries carry no per-entry size data and the
+    /// total_size cannot be computed from entries. Use this method to set the
+    /// aggregate size stored in the header.
+    #[must_use]
+    pub fn total_size(mut self, size: u64) -> Self {
+        self.total_size_override = Some(size);
         self
     }
 
@@ -92,10 +107,12 @@ impl SizeManifestBuilder {
         self
     }
 
-    /// Add an entry with the given key and estimated size
+    /// Add an entry with the given key, key hash, and estimated size
+    ///
+    /// `key_hash` must not be 0x0000 or 0xFFFF (reserved sentinel values).
     #[must_use]
-    pub fn add_entry(mut self, key: Vec<u8>, esize: u64) -> Self {
-        self.entries.push(SizeEntry::new(key, esize));
+    pub fn add_entry(mut self, key: Vec<u8>, key_hash: u16, esize: u64) -> Self {
+        self.entries.push(SizeEntry::new(key, key_hash, esize));
         self
     }
 
@@ -109,9 +126,10 @@ impl SizeManifestBuilder {
             return Err(SizeError::UnsupportedVersion(self.version));
         }
 
-        let ekey_size = self.ekey_size;
-        if ekey_size == 0 || ekey_size > 16 {
-            return Err(SizeError::InvalidEKeySize(ekey_size));
+        // Validate key_size_bits produces a valid byte count (1-16)
+        let key_bytes = (self.key_size_bits.saturating_add(7)) >> 3;
+        if key_bytes == 0 || key_bytes > 16 {
+            return Err(SizeError::InvalidEKeySize(self.key_size_bits));
         }
 
         // If tags were added via add_tag(), update tag_count
@@ -120,7 +138,9 @@ impl SizeManifestBuilder {
         }
 
         let entry_count = self.entries.len() as u32;
-        let total_size: u64 = self.entries.iter().map(|e| e.esize).sum();
+        let total_size: u64 = self
+            .total_size_override
+            .unwrap_or_else(|| self.entries.iter().map(|e| e.esize).sum());
 
         // Resize tag bit masks to match entry count
         let bit_mask_size = (self.entries.len()).div_ceil(8);
@@ -130,18 +150,18 @@ impl SizeManifestBuilder {
 
         let header = match self.version {
             1 => {
-                if self.esize_bytes == 0 || self.esize_bytes > 8 {
+                if self.esize_bytes > 8 {
                     return Err(SizeError::InvalidEsizeWidth(self.esize_bytes));
                 }
                 SizeHeader::new_v1(
-                    ekey_size,
+                    self.key_size_bits,
                     entry_count,
                     self.tag_count,
                     total_size,
                     self.esize_bytes,
                 )
             }
-            2 => SizeHeader::new_v2(ekey_size, entry_count, self.tag_count, total_size),
+            2 => SizeHeader::new_v2(self.key_size_bits, entry_count, self.tag_count, total_size),
             _ => unreachable!(),
         };
 
@@ -172,11 +192,12 @@ mod tests {
     #[test]
     fn test_builder_defaults() {
         let manifest = SizeManifestBuilder::new()
-            .add_entry(vec![0xAA; 9], 100)
+            .add_entry(vec![0xAA; 9], 0x0001, 100)
             .build()
             .expect("Should build with defaults");
 
         assert_eq!(manifest.header.version(), 2);
+        assert_eq!(manifest.header.key_size_bits(), 72);
         assert_eq!(manifest.header.ekey_size(), 9);
         assert_eq!(manifest.header.tag_count(), 0);
         assert_eq!(manifest.header.esize_bytes(), 4);
@@ -190,9 +211,9 @@ mod tests {
         let manifest = SizeManifestBuilder::new()
             .version(1)
             .esize_bytes(2)
-            .ekey_size(9)
-            .add_entry(vec![0x11; 9], 50)
-            .add_entry(vec![0x22; 9], 75)
+            .key_size_bits(72)
+            .add_entry(vec![0x11; 9], 0x0001, 50)
+            .add_entry(vec![0x22; 9], 0x0002, 75)
             .build()
             .expect("Should build V1 manifest");
 
@@ -206,12 +227,13 @@ mod tests {
     fn test_builder_v2() {
         let manifest = SizeManifestBuilder::new()
             .version(2)
-            .ekey_size(9)
-            .add_entry(vec![0xCC; 9], 1000)
+            .key_size_bits(72)
+            .add_entry(vec![0xCC; 9], 0x0001, 1000)
             .build()
             .expect("Should build V2 manifest");
 
         assert_eq!(manifest.header.version(), 2);
+        assert_eq!(manifest.header.key_size_bits(), 72);
         assert_eq!(manifest.header.ekey_size(), 9);
         assert_eq!(manifest.header.esize_bytes(), 4);
         assert_eq!(manifest.header.total_size(), 1000);
@@ -241,22 +263,36 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_rejects_zero_ekey_size() {
-        let result = SizeManifestBuilder::new().ekey_size(0).build();
+    fn test_builder_rejects_zero_key_size_bits() {
+        // 0 bits → 0 bytes, invalid
+        let result = SizeManifestBuilder::new().key_size_bits(0).build();
         assert!(matches!(result, Err(SizeError::InvalidEKeySize(0))));
     }
 
     #[test]
-    fn test_builder_rejects_ekey_size_17() {
-        let result = SizeManifestBuilder::new().ekey_size(17).build();
-        assert!(matches!(result, Err(SizeError::InvalidEKeySize(17))));
+    fn test_builder_rejects_oversized_key_size_bits() {
+        // 129 bits → 17 bytes, exceeds 16-byte maximum
+        let result = SizeManifestBuilder::new().key_size_bits(129).build();
+        assert!(matches!(result, Err(SizeError::InvalidEKeySize(129))));
+    }
+
+    #[test]
+    fn test_builder_accepts_esize_bytes_0_v1() {
+        let manifest = SizeManifestBuilder::new()
+            .version(1)
+            .esize_bytes(0)
+            .key_size_bits(72)
+            .add_entry(vec![0xAA; 9], 0x0001, 0)
+            .build()
+            .expect("Should build V1 manifest with esize_bytes=0");
+
+        assert_eq!(manifest.header.version(), 1);
+        assert_eq!(manifest.header.esize_bytes(), 0);
+        assert_eq!(manifest.entries.len(), 1);
     }
 
     #[test]
     fn test_builder_rejects_invalid_esize_bytes_v1() {
-        let result = SizeManifestBuilder::new().version(1).esize_bytes(0).build();
-        assert!(matches!(result, Err(SizeError::InvalidEsizeWidth(0))));
-
         let result = SizeManifestBuilder::new().version(1).esize_bytes(9).build();
         assert!(matches!(result, Err(SizeError::InvalidEsizeWidth(9))));
     }
@@ -265,9 +301,9 @@ mod tests {
     fn test_builder_with_tags() {
         let manifest = SizeManifestBuilder::new()
             .version(2)
-            .ekey_size(9)
-            .add_entry(vec![0xAA; 9], 100)
-            .add_entry(vec![0xBB; 9], 200)
+            .key_size_bits(72)
+            .add_entry(vec![0xAA; 9], 0x0001, 100)
+            .add_entry(vec![0xBB; 9], 0x0002, 200)
             .add_tag("Windows".to_string(), TagType::Platform)
             .tag_file(0, 0)
             .tag_file(0, 1)
