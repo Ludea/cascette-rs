@@ -47,5 +47,9 @@ required-features = ["wago"]
 name = "blizztrack_verification"
 required-features = ["blizztrack"]
 
+[[example]]
+name = "listfile_name_lookup"
+required-features = ["listfile"]
+
 [lints]
 workspace = true

@@ -99,7 +99,7 @@ async fn test_resolve_metadata_with_overrides() {
     .unwrap();
 
     // Overrides are prepended; Ribbit-advertised endpoints follow as fallback.
-    assert!(metadata.endpoints.len() >= 1);
+    assert!(!metadata.endpoints.is_empty());
     assert_eq!(metadata.endpoints[0].host, "custom.cdn.example.com");
     assert_eq!(metadata.cdn_path, "custom/path");
 }
