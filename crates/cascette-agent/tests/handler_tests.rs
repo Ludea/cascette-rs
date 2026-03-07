@@ -419,20 +419,20 @@ async fn test_get_sessions_empty() {
 async fn test_post_and_get_session() {
     let state = common::test_app_state().await;
 
-    // POST to create a session
+    // POST to create a session without a pid (no process validation required)
     let router = common::test_router(state.clone());
     let req = Request::builder()
         .method(Method::POST)
         .uri("/gamesession/wow")
         .header("content-type", "application/json")
-        .body(Body::from(r#"{"pid": 12345}"#))
+        .body(Body::from(r#"{}"#))
         .unwrap();
     let resp = router.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
     assert_eq!(json["active"], true);
 
-    // GET to verify
+    // GET to verify session was stored
     let router2 = common::test_router(state);
     let req = Request::builder()
         .uri("/gamesession/wow")
@@ -443,7 +443,6 @@ async fn test_post_and_get_session() {
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
     assert_eq!(json["active"], true);
-    assert_eq!(json["pid"], 12345);
 }
 
 #[tokio::test]

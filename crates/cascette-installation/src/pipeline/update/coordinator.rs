@@ -509,7 +509,7 @@ mod tests {
             offset: 0,
         };
 
-        let mut requests = vec![req_normal.clone(), req_partial.clone(), req_patch.clone()];
+        let mut requests = [req_normal, req_partial, req_patch];
         requests.sort();
 
         assert_eq!(requests[0].priority, DownloadPriority::PARTIAL);
