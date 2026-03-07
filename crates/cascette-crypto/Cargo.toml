@@ -20,8 +20,14 @@ md-5 = "0.10"
 salsa20 = "0.10"
 cipher = "0.4"
 
+# Random number generation (for key/IV generation)
+getrandom = { workspace = true }
+
 # Utilities
 hex = { workspace = true }
+
+# Platform paths
+dirs = "6"
 
 # Binary format handling
 binrw = { workspace = true }
@@ -37,3 +43,19 @@ ignored = ["cipher", "md-5"]
 
 [lints]
 workspace = true
+
+[[example]]
+name = "crypto_primitives"
+path = "examples/crypto_primitives.rs"
+
+[[example]]
+name = "salsa20_encryption"
+path = "examples/salsa20_encryption.rs"
+
+[[example]]
+name = "tact_keyring"
+path = "examples/tact_keyring.rs"
+
+[[example]]
+name = "armadillo_keys"
+path = "examples/armadillo_keys.rs"
