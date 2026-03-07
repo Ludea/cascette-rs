@@ -74,6 +74,24 @@ impl Database {
         self.migrate_v2_to_v3().await?;
         self.migrate_v3_to_v4().await?;
         self.migrate_v4_to_v5().await?;
+        self.reset_inflight_operations().await?;
+        Ok(())
+    }
+
+    /// Reset operations that were in-flight when the agent last stopped.
+    ///
+    /// Operations in `initializing`, `downloading`, or `verifying` state were
+    /// interrupted by an agent restart. Reset them to `queued` so the runner
+    /// re-dispatches them. The install pipeline resumes from checkpoint.
+    async fn reset_inflight_operations(&self) -> AgentResult<()> {
+        self.conn
+            .execute(
+                "UPDATE operations
+                 SET state = 'queued', updated_at = CURRENT_TIMESTAMP
+                 WHERE state IN ('initializing', 'downloading', 'verifying')",
+                (),
+            )
+            .await?;
         Ok(())
     }
 

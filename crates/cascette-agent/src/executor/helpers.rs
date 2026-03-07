@@ -123,43 +123,47 @@ async fn resolve_product_metadata_inner(
         .get_raw_by_name("KeyRing", versions.schema())
         .map(ToString::to_string);
 
-    // Resolve CDN endpoints
+    // Resolve CDN endpoints from Ribbit, then prepend any operator overrides.
+    let cdns_endpoint = format!("v1/products/{product}/cdns");
+    let cdns = ribbit.query(&cdns_endpoint).await?;
+
+    let mut resolved_endpoints = Vec::new();
+    let mut cdn_path = String::new();
+
+    for row in cdns.rows() {
+        // Filter to matching region if possible
+        let row_region = row.get_raw_by_name("Name", cdns.schema()).unwrap_or("");
+
+        if !row_region.eq_ignore_ascii_case(region) && !resolved_endpoints.is_empty() {
+            continue;
+        }
+
+        if let Ok(ep) = CdnClient::endpoint_from_bpsv_row(row, cdns.schema()) {
+            if cdn_path.is_empty() {
+                cdn_path.clone_from(&ep.path);
+            }
+            resolved_endpoints.push(ep);
+        }
+    }
+
+    if resolved_endpoints.is_empty() {
+        return Err(AgentError::InvalidConfig(format!(
+            "no CDN endpoints found for product {product}"
+        )));
+    }
+
+    // Prepend operator-configured overrides so they are tried first,
+    // with Ribbit-advertised endpoints as fallback.
     let (endpoints, cdn_path) = if let Some(overrides) = cdn_overrides {
-        // Use operator-provided CDN hosts
-        let path = overrides
-            .first()
-            .map_or_else(|| "tpr/wow".to_string(), |e| e.path.clone());
-        (overrides.to_vec(), path)
+        let all = overrides
+            .iter()
+            .cloned()
+            .chain(resolved_endpoints)
+            .collect::<Vec<_>>();
+        // Use the override path if provided, otherwise keep the Ribbit path.
+        let path = overrides.first().map_or(cdn_path, |e| e.path.clone());
+        (all, path)
     } else {
-        // Query CDN info from Ribbit
-        let cdns_endpoint = format!("v1/products/{product}/cdns");
-        let cdns = ribbit.query(&cdns_endpoint).await?;
-
-        let mut resolved_endpoints = Vec::new();
-        let mut cdn_path = String::new();
-
-        for row in cdns.rows() {
-            // Filter to matching region if possible
-            let row_region = row.get_raw_by_name("Name", cdns.schema()).unwrap_or("");
-
-            if !row_region.eq_ignore_ascii_case(region) && !resolved_endpoints.is_empty() {
-                continue;
-            }
-
-            if let Ok(ep) = CdnClient::endpoint_from_bpsv_row(row, cdns.schema()) {
-                if cdn_path.is_empty() {
-                    cdn_path.clone_from(&ep.path);
-                }
-                resolved_endpoints.push(ep);
-            }
-        }
-
-        if resolved_endpoints.is_empty() {
-            return Err(AgentError::InvalidConfig(format!(
-                "no CDN endpoints found for product {product}"
-            )));
-        }
-
         (resolved_endpoints, cdn_path)
     };
 
@@ -404,6 +408,7 @@ impl ProgressBridge {
                     if let Ok(mut s) = speed.try_lock() {
                         s.start(path.clone(), size);
                     }
+                    p.phase = "downloading".to_string();
                     p.current_file = Some(path.clone());
                     let new_bytes = p.bytes_done.saturating_add(size);
                     p.update_bytes(new_bytes);

@@ -10,6 +10,23 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-agent: README sections for configuration, CLI flags, environment
+  variables, local CDN mirror setup, mirror directory layout, fallback behavior,
+  historical installs, and non-WoW product path overrides
+
+### Fixed
+
+- cascette-agent: CDN override hosts are now prepended to Ribbit-advertised
+  endpoints instead of replacing them; both standard and historical installs use
+  the same fallback chain (overrides → community mirrors → official CDN)
+- cascette-agent: in-flight operations (`initializing`, `downloading`,
+  `verifying`) are reset to `queued` on startup so interrupted installs resume
+  after an agent restart
+- cascette-agent: progress tracking now sets `phase = "downloading"` when a
+  file transfer begins
+
+### Added
+
 - cascette-proto: new crate — prost-generated protobuf types from
   `proto_database.proto` matching the Blizzard Agent `product.db` binary format.
   Messages: `Database`, `ProductInstall`, `ProductConfig`, `ProductLanguage`,

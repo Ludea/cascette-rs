@@ -92,7 +92,13 @@ pub async fn execute(
                 use_community_mirrors: true,
                 is_historic: true,
             };
-            let endpoints = mirror_config.build_endpoint_list(&cdn_path);
+            let mut endpoints = mirror_config.build_endpoint_list(&cdn_path);
+
+            // Prepend any operator-configured CDN overrides (e.g. a local mirror)
+            // so they are tried first before community and official endpoints.
+            if let Some(overrides) = state.config.cdn_endpoint_overrides() {
+                endpoints = overrides.into_iter().chain(endpoints).collect();
+            }
 
             info!(
                 product = %operation.product_code,
