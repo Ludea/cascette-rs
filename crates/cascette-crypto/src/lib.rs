@@ -79,6 +79,7 @@
 pub mod arc4;
 pub mod armadillo;
 pub mod error;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod generate;
 pub mod jenkins;
 pub mod keys;
@@ -88,6 +89,7 @@ pub mod salsa20;
 pub mod store_trait;
 
 pub use error::CryptoError;
+#[cfg(not(target_arch = "wasm32"))]
 pub use generate::{generate_salsa20_iv, generate_tact_key};
 
 // Re-export commonly used types

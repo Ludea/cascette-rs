@@ -20,9 +20,6 @@ md-5 = "0.10"
 salsa20 = "0.10"
 cipher = "0.4"
 
-# Random number generation (for key/IV generation)
-getrandom = { workspace = true }
-
 # Utilities
 hex = { workspace = true }
 
@@ -31,6 +28,10 @@ dirs = "6"
 
 # Binary format handling
 binrw = { workspace = true }
+
+# Random number generation (for key/IV generation, not available on WASM)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+getrandom = { workspace = true }
 
 [dev-dependencies]
 # Testing framework
