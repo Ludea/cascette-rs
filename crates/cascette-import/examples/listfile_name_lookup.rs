@@ -120,8 +120,8 @@ async fn main() {
                   892176;World/Maps/Azeroth/Azeroth.wdt\n\
                   781764;Sound/Music/ZoneMusic/DMF_L70ETC01.mp3\n";
 
-    println!("  {:<8}  {:<20}  Path", "FDID", "Name hash");
-    println!("  {:-<8}  {:-<20}  {:-<50}", "", "", "");
+    println!("  {:<8}  {:<18}  Path", "FDID", "Name hash");
+    println!("  {:-<8}  {:-<18}  {:-<50}", "", "", "");
     for line in sample.lines() {
         if let Some((id_str, path)) = line.split_once(';')
             && let Ok(fdid) = id_str.parse::<u32>()

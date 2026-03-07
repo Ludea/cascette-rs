@@ -160,10 +160,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let sample_count = max_archives.min(archives.len());
 
     println!(
-        "  {:<34}  {:>8}  {:>15}",
+        "  {:<32}  {:>8}  {:>15}",
         "Archive hash", "Entries", "Data size"
     );
-    println!("  {:-<34}  {:->8}  {:->15}", "", "", "");
+    println!("  {:-<32}  {:->8}  {:->15}", "", "", "");
 
     for archive_hash in archives.iter().take(sample_count) {
         // Download the archive index (.index file)
@@ -198,13 +198,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 total_data_bytes += data_size;
 
                 println!(
-                    "  {archive_hash:<34}  {:>8}  {:>15}",
+                    "  {archive_hash:<32}  {:>8}  {:>15}",
                     entry_count,
                     format_bytes(data_size)
                 );
             }
             Err(e) => {
-                println!("  {archive_hash:<34}  [error: {e}]");
+                println!("  {archive_hash:<32}  [error: {e}]");
             }
         }
     }
