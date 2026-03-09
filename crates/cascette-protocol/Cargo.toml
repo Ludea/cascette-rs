@@ -114,6 +114,10 @@ path = "examples/dump_product_info.rs"
 name = "cdn_archive_sizes"
 path = "examples/cdn_archive_sizes.rs"
 
+[[example]]
+name = "build_file_tree"
+path = "examples/build_file_tree.rs"
+
 [package.metadata.cargo-machete]
 # These dependencies are used for V1 MIME format support and other features
 # getrandom_02 is a renamed dep to enable the "js" feature for getrandom 0.2 on WASM

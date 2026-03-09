@@ -184,7 +184,7 @@ async fn do_estimate(
                     .map_err(|e| -> BoxError { e.to_string().into() })?;
                 let decompressed = blte.decompress_with_keys(key_store.as_ref())?;
                 let manifest = SizeManifest::parse(&decompressed)?;
-                let total = manifest.header.total_size();
+                let total = manifest.header.total_size;
                 if total > 0 {
                     return Ok(total);
                 }

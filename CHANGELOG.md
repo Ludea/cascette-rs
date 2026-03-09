@@ -10,6 +10,26 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-protocol: `build_file_tree` example — walks a CASC build's file tree
+  from a build config hash and CDN config hash. Supports local mirror mode
+  (`/path/to/mirror tpr/wow`) and online CDN mode (`https://host tpr/wow`).
+  `--paths` flag emits one CDN path per tracked file for piping. Archive index
+  scanning runs concurrently via `futures::join_all`.
+- cascette-formats: size manifest rewrite — dedicated header, entry, builder,
+  and error modules replace the previous single-file implementation. Binary
+  layout matches wowdev.wiki DS format: 15-byte header, optional tag bitfields,
+  9-byte ekey + 4-byte esize entries.
+
+### Fixed
+
+- cascette-formats: broken intra-doc link `[SizeHeader]` in `size/mod.rs` now
+  uses the full path `[crate::size::SizeHeader]` so `RUSTDOCFLAGS=-D warnings`
+  passes across all render contexts
+- cascette-formats: hex literal in size header test corrected from
+  `0x0123_4567_89` to `0x0001_2345_6789` to satisfy `unusual_byte_groupings`
+
+### Added
+
 - cascette-agent: README sections for configuration, CLI flags, environment
   variables, local CDN mirror setup, mirror directory layout, fallback behavior,
   historical installs, and non-WoW product path overrides
