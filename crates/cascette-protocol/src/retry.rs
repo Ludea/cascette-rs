@@ -11,12 +11,12 @@ use crate::error::Result;
 ///
 /// On native platforms, uses tokio::time::sleep.
 /// On WASM, uses gloo_timers::future::TimeoutFuture.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
 async fn sleep(duration: Duration) {
     tokio::time::sleep(duration).await;
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
 async fn sleep(duration: Duration) {
     gloo_timers::future::TimeoutFuture::new(duration.as_millis() as u32).await;
 }

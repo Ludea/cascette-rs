@@ -43,31 +43,22 @@ rsa = { workspace = true }
 sha2 = { workspace = true }
 digest = { workspace = true }
 base64 = { workspace = true }
+cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
+cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
+cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+tokio = { version = "1.51", default-features = false, features = ["sync", "macros"] }
 
 # Native platform dependencies (tokio with full features, reqwest, internal crates)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { workspace = true, features = ["full"] }
 reqwest = { workspace = true }
 rustls = { workspace = true }
-cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
-cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
-cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 
 # WASM platform dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-# WASM-compatible tokio - only sync primitives, no runtime (use wasm-bindgen-futures instead)
-# Cannot use workspace = true when overriding default-features
-tokio = { version = "1.49", default-features = false, features = ["sync", "macros"] }
 # WASM-compatible reqwest (uses web-sys/fetch API instead of native sockets)
 reqwest = { version = "0.13", default-features = false, features = ["gzip", "brotli", "deflate", "charset"] }
-# gloo-timers provides WASM-compatible sleep functionality
-gloo-timers = { version = "0.3", features = ["futures"] }
 # web-sys for browser APIs (console logging, localStorage for caching)
 web-sys = { version = "0.3", features = ["console", "Window", "Storage"] }
-# WASM-compatible internal dependencies (cascette-crypto, cascette-formats, cascette-cache support WASM)
-cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
-cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
-cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
 
 # Browser WASM (wasm32-unknown-unknown) — not WASI
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
@@ -77,6 +68,7 @@ wasm-bindgen-futures = "0.4"
 getrandom = { workspace = true, features = ["wasm_js"] }
 # getrandom 0.2 (transitive from rsa 0.9) needs js for browser crypto
 getrandom_02 = { workspace = true, features = ["js"] }
+
 # js-sys for Date.now() timestamp access
 js-sys = "0.3"
 
