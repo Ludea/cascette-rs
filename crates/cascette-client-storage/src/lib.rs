@@ -164,6 +164,10 @@ pub enum StorageError {
     /// Data is partially available; the key should be marked non-resident.
     #[error("Truncated read: {0}")]
     TruncatedRead(String),
+
+    /// OutofBound with wasi sharef memory
+    #[error("Wasi shared memory : {0}")]
+    WasiError(String),
 }
 
 /// Version information for the storage system.

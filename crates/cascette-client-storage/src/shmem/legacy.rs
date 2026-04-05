@@ -1010,12 +1010,50 @@ impl SharedMemoryManager {
     }
 }
 
+#[cfg(target_os = "wasi")]
+mod wasi {
+    use crate::{Result, StorageError};
+    use std::sync::{Arc, Mutex};
+
+    pub struct WasiSharedMemory {
+        buffer: Arc<Mutex<Vec<u8>>>,
+    }
+    impl WasiSharedMemory {
+        pub fn create(_name: &str, size: usize) -> Result<Self> {
+            Ok(Self {
+                buffer: Arc::new(Mutex::new(vec![0; size])),
+            })
+        }
+
+        pub fn write(&self, offset: usize, data: &[u8]) -> Result<()> {
+            let mut buf = self.buffer.lock().unwrap();
+            let end = offset + data.len();
+            if end > buf.len() {
+                return Err(StorageError::WasiError("Buffer is too small".to_string()));
+            }
+            buf[offset..end].copy_from_slice(data);
+            Ok(())
+        }
+
+        pub fn read(&self, offset: usize, size: usize) -> Result<Vec<u8>> {
+            let buf = self.buffer.lock().unwrap();
+            let end = offset + size;
+            if end > buf.len() {
+                return Err(StorageError::WasiError("Buffer is too small".to_string()));
+            }
+            Ok(buf[offset..end].to_vec())
+        }
+    }
+}
+
 /// Platform-specific shared memory handle
 struct SharedMemoryHandle {
     #[cfg(target_os = "windows")]
     inner: windows::WindowsSharedMemory,
     #[cfg(unix)]
     inner: unix::UnixSharedMemory,
+    #[cfg(target_os = "wasi")]
+    inner: wasi::WasiSharedMemory,
 }
 
 impl SharedMemoryHandle {
@@ -1031,6 +1069,11 @@ impl SharedMemoryHandle {
             let inner = unix::UnixSharedMemory::create(name, size)?;
             Ok(Self { inner })
         }
+        #[cfg(target_os = "wasi")]
+        {
+            let inner = wasi::WasiSharedMemory::create(name, size)?;
+            Ok(Self { inner })
+        }
     }
 
     /// Write data to shared memory
@@ -1043,6 +1086,10 @@ impl SharedMemoryHandle {
         {
             self.inner.write(offset, data)
         }
+        #[cfg(target_os = "wasi")]
+        {
+            self.inner.write(offset, data)
+        }
     }
 
     /// Read data from shared memory
@@ -1052,6 +1099,10 @@ impl SharedMemoryHandle {
             self.inner.read(offset, size)
         }
         #[cfg(unix)]
+        {
+            self.inner.read(offset, size)
+        }
+        #[cfg(target_os = "wasi")]
         {
             self.inner.read(offset, size)
         }
