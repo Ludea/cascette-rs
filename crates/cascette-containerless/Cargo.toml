@@ -20,13 +20,7 @@ cascette-proto = { version = "0.2.0", path = "../cascette-proto" }
 
 # Workspace dependencies
 thiserror = { workspace = true }
-tokio = { workspace = true, features = [
-  "fs",
-  "io-util",
-  "macros",
-  "sync",
-  "rt-multi-thread",
-] }
+tokio = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 md5 = { workspace = true }
