@@ -8,9 +8,9 @@ use tracing::{info, warn};
 use cascette_client_storage::Installation;
 
 use crate::error::{AgentError, AgentResult};
+use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
-use crate::server::router::AppState;
 
 use super::helpers::{
     ProgressBridge, build_install_config, build_update_config, resolve_cdn_info,

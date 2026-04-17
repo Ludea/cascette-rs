@@ -17,9 +17,9 @@ use cascette_maintenance::ExecutionMode;
 use cascette_maintenance::repair::{BuildRepairOrchestrator, RepairConfig};
 
 use crate::error::{AgentError, AgentResult};
+use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
-use crate::server::router::AppState;
 
 use super::helpers::{ProgressBridge, build_install_config, resolve_product_metadata};
 

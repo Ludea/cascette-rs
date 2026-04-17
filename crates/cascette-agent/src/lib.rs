@@ -35,10 +35,10 @@
 pub mod config;
 pub mod error;
 pub mod executor;
+pub mod handlers;
 pub mod models;
 pub mod observability;
 pub mod process_detection;
-pub mod server;
 pub mod session;
 pub mod state;
 

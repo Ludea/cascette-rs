@@ -18,9 +18,14 @@ use tracing::info;
 use cascette_agent::config::AgentConfig;
 use cascette_agent::executor::OperationRunner;
 use cascette_agent::observability;
-use cascette_agent::server::router::{AppState, create_router};
 use cascette_agent::state::db::Database;
 use cascette_import::ImportProvider;
+
+use crate::router::create_router;
+use cascette_agent::handlers::AppState;
+
+mod router;
+mod routes;
 
 #[tokio::main]
 async fn main() -> Result<()> {

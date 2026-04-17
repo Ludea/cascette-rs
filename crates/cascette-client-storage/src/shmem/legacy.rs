@@ -1334,9 +1334,9 @@ mod unix {
     use std::ptr;
     use std::slice;
 
-    use libc::{MAP_SHARED, O_CREAT, O_RDWR, PROT_READ, PROT_WRITE, S_IRUSR, S_IWUSR};
-    use libc::{c_uint, c_void, mode_t, off_t, size_t};
-    use libc::{close, ftruncate, mmap, munmap, shm_open, shm_unlink};
+    use libc::{MAP_SHARED, PROT_READ, PROT_WRITE};
+    use libc::{c_void, off_t, size_t};
+    use libc::{close, ftruncate, mmap, munmap};
 
     use crate::{Result, StorageError};
 
@@ -1359,11 +1359,11 @@ mod unix {
 
             // Open shared memory object
             let fd = unsafe {
-                shm_open(
-                    c_name.as_ptr(),
-                    O_CREAT | O_RDWR,
-                    c_uint::from((S_IRUSR | S_IWUSR) as mode_t),
-                )
+                libc::syscall(
+                    libc::SYS_memfd_create,
+                    c_name.as_ptr(),   // même CStr que shm_open
+                    libc::MFD_CLOEXEC, // ou 0 si indisponible
+                ) as i32
             };
 
             if fd == -1 {
@@ -1392,16 +1392,6 @@ mod unix {
                     0,
                 )
             };
-
-            if ptr == libc::MAP_FAILED {
-                unsafe {
-                    close(fd);
-                    shm_unlink(c_name.as_ptr());
-                }
-                return Err(StorageError::SharedMemory(
-                    "Failed to map shared memory".to_string(),
-                ));
-            }
 
             Ok(Self {
                 fd,
@@ -1472,11 +1462,7 @@ mod unix {
                 if self.fd != -1 {
                     close(self.fd);
                 }
-                // Unlink shared memory object - handle CString creation failure
-                // gracefully to avoid panic during stack unwinding
-                if let Ok(c_name) = CString::new(self.name.clone()) {
-                    shm_unlink(c_name.as_ptr());
-                }
+
                 // If CString creation fails (name contains null byte), we skip
                 // unlinking. The OS will clean up the shared memory segment
                 // when no processes have it mapped.

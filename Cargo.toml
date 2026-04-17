@@ -57,8 +57,8 @@ parking_lot = "0.12"
 tokio-util = "0.7"
 
 # Database
-turso = { version = "0.4", default-features = false }
-
+# turso = { version = "0.4", default-features = false }
+turso = { git = "https://github.com/Ludea/turso", package = "turso", default-features = false }
 # Memory-mapped I/O
 memmap2 = "0.9"
 
@@ -66,7 +66,8 @@ memmap2 = "0.9"
 flate2 = "1.1"
 
 # HTTP client
-reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls-no-provider", "gzip", "brotli", "deflate", "http2", "charset"] }
+#reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls-no-provider", "gzip", "brotli", "deflate", "http2", "charset"] }
+reqwest = { git = "https://github.com/ludea/reqwest", branch = "wasm_deps", default-features = false, features = ["stream", "rustls-no-provider", "gzip", "brotli", "deflate", "http2", "charset"] } 
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 url = "2.5"
 
@@ -74,7 +75,7 @@ url = "2.5"
 hyper-rustls = { version = "0.27", default-features = false, features = ["ring", "http1", "http2", "tls12", "logging"] }
 
 # Async runtime
-tokio = { version = "1.49", features = ["full"] }
+tokio = { version = "1.51", default-features = false, features = ["sync", "macros", "fs", "signal"] }
 async-trait = "0.1"
 futures = "0.3"
 

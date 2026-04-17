@@ -2,16 +2,15 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use cascette_installation::{VerifyConfig, VerifyMode, VerifyPipeline};
 
 use crate::error::{AgentError, AgentResult};
+use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
-use crate::server::router::AppState;
 
 use super::helpers::ProgressBridge;
 

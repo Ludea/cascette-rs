@@ -105,8 +105,8 @@ impl Default for CacheConfig {
             memory_max_items: 10000,                  // 10k items in memory
             memory_max_size_bytes: 256 * 1024 * 1024, // 256MB memory cache
             // Disk cache for larger items
-            disk_max_size_bytes: 8 * 1024 * 1024 * 1024, // 8GB disk cache
-            disk_max_file_size: 100 * 1024 * 1024,       // 100MB max file size
+            disk_max_size_bytes: 8, // 1024 * 1024 * 1024, // 8GB disk cache
+            disk_max_file_size: 100 * 1024 * 1024, // 100MB max file size
             // Protocol-specific TTLs
             ribbit_ttl: Duration::from_secs(300), // 5 minutes for version info
             cdn_ttl: Duration::from_secs(3600),   // 1 hour for CDN content
@@ -131,7 +131,7 @@ impl CacheConfig {
             disk_max_size_bytes: std::env::var("CASCETTE_DISK_MAX_SIZE")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(8 * 1024 * 1024 * 1024),
+                .unwrap_or(8), //  1024 * 1024 * 1024),
             disk_max_file_size: std::env::var("CASCETTE_DISK_MAX_FILE_SIZE")
                 .ok()
                 .and_then(|s| s.parse().ok())
@@ -163,7 +163,7 @@ impl CacheConfig {
             cache_dir: Some(PathBuf::from("/var/cache/cascette")),
             memory_max_items: 50000,                   // 50k items in memory
             memory_max_size_bytes: 1024 * 1024 * 1024, // 1GB memory cache
-            disk_max_size_bytes: 32 * 1024 * 1024 * 1024, // 32GB disk cache
+            disk_max_size_bytes: 32,                   // 1024 * 1024 * 1024, // 32GB disk cache
             disk_max_file_size: 500 * 1024 * 1024,     // 500MB max file size
             ribbit_ttl: Duration::from_secs(180),      // 3 minutes for faster updates
             cdn_ttl: Duration::from_secs(7200),        // 2 hours for CDN content

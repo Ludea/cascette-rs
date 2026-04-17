@@ -385,13 +385,16 @@ async fn main() {
             strict: false,
             max_hosts: None,
         };
-        let cache = Arc::new(
-            cascette_protocol::cache::ProtocolCache::new(&cascette_protocol::CacheConfig::default())
+        let cache =
+            Arc::new(
+                cascette_protocol::cache::ProtocolCache::new(
+                    &cascette_protocol::CacheConfig::default(),
+                )
                 .unwrap_or_else(|e| {
                     eprintln!("cache init failed: {e}");
                     std::process::exit(1)
                 }),
-        );
+            );
         let cdn_client = CdnClient::new(cache, CdnConfig::default()).unwrap_or_else(|e| {
             eprintln!("CDN client init failed: {e}");
             std::process::exit(1)

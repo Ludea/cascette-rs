@@ -11,9 +11,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::{ptr, slice};
 
-use libc::{MAP_SHARED, O_CREAT, O_RDWR, PROT_READ, PROT_WRITE, S_IRUSR, S_IWUSR};
-use libc::{c_uint, c_void, mode_t, off_t, size_t};
-use libc::{close, ftruncate, mmap, munmap, shm_open};
+use libc::{MAP_SHARED, PROT_READ, PROT_WRITE};
+use libc::{c_void, off_t, size_t};
+use libc::{close, ftruncate, mmap, munmap};
 
 use crate::{Result, StorageError};
 
@@ -62,17 +62,25 @@ impl PlatformShmem {
         let c_name = CString::new(shm_name.clone())
             .map_err(|e| StorageError::SharedMemory(format!("invalid shm name: {e}")))?;
 
-        let fd = unsafe {
+        /*     let fd = unsafe {
             shm_open(
                 c_name.as_ptr(),
                 O_CREAT | O_RDWR,
                 c_uint::from((S_IRUSR | S_IWUSR) as mode_t),
             )
+        };*/
+
+        let fd = unsafe {
+            libc::syscall(
+                libc::SYS_memfd_create,
+                c_name.as_ptr(),
+                libc::MFD_CLOEXEC, // ou 0
+            ) as i32
         };
 
-        if fd == -1 {
+        if fd < 0 {
             return Err(StorageError::SharedMemory(format!(
-                "shm_open failed for {shm_name}: {}",
+                "memfd_create failed for {shm_name}: {}",
                 std::io::Error::last_os_error()
             )));
         }
