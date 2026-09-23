@@ -58,7 +58,7 @@ tokio-util = "0.7"
 
 # Database
 # turso = { version = "0.4", default-features = false }
-turso = { git = "https://github.com/Ludea/turso", package = "turso", default-features = false }
+turso = { git = "https://github.com/Ludea/turso", branch = "wasip3", package = "turso", default-features = false }
 # Memory-mapped I/O
 memmap2 = "0.9"
 
