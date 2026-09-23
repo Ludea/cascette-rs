@@ -75,7 +75,7 @@ reqwest = { version = "0.13", default-features = false, features = [
   "http2",
   "charset",
 ] }
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 url = "2.5"
 
 # Add hyper-rustls with ring feature to ensure ring is used instead of aws-lc-rs
