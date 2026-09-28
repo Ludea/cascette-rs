@@ -277,9 +277,9 @@ impl Server {
         });
 
         // Wait for shutdown signal
-        tokio::signal::ctrl_c().await.map_err(|e| {
+     /*   tokio::signal::ctrl_c().await.map_err(|e| {
             ServerError::Shutdown(format!("Failed to listen for shutdown signal: {e}"))
-        })?;
+        })?;*/
 
         tracing::info!("Shutdown signal received, stopping server");
 
