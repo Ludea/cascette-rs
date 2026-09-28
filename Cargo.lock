@@ -292,16 +292,7 @@ version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce2b2dcc879c3bae0d371e77c99f2238400ef24ec001394befa67b6e543add9e"
 dependencies = [
- "aws-lc-sys 0.44.0",
- "zeroize",
-]
-
-[[package]]
-name = "aws-lc-rs"
-version = "1.18.1"
-source = "git+https://github.com/ricochet/aws-lc-rs?branch=wasip3#0dcb26dc7ffdb6f84ef843c0ef8b7b5dd534b79d"
-dependencies = [
- "aws-lc-sys 0.45.0",
+ "aws-lc-sys",
  "zeroize",
 ]
 
@@ -310,18 +301,6 @@ name = "aws-lc-sys"
 version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f09fae7be8bb3174e05c6afdb34199e6dc0c7c04ba9fa237b1967adfbde27483"
-dependencies = [
- "cc",
- "cmake",
- "dunce",
- "fs_extra",
- "pkg-config",
-]
-
-[[package]]
-name = "aws-lc-sys"
-version = "0.45.0"
-source = "git+https://github.com/ricochet/aws-lc-rs?branch=wasip3#0dcb26dc7ffdb6f84ef843c0ef8b7b5dd534b79d"
 dependencies = [
  "cc",
  "cmake",
@@ -396,7 +375,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "pin-project-lite",
- "rustls 0.23.45 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
  "tokio",
@@ -620,7 +599,7 @@ dependencies = [
  "pretty_assertions",
  "prometheus",
  "proptest",
- "rustls 0.23.45 (git+https://github.com/Ludea/rustls?branch=aws-lc-rs)",
+ "rustls",
  "serde",
  "serde_json",
  "sysinfo",
@@ -754,7 +733,7 @@ dependencies = [
  "hex",
  "pretty_assertions",
  "reqwest",
- "rustls 0.23.45 (git+https://github.com/Ludea/rustls?branch=aws-lc-rs)",
+ "rustls",
  "serde",
  "serde_json",
  "tempfile",
@@ -855,7 +834,7 @@ dependencies = [
  "rand 0.10.3",
  "reqwest",
  "rsa",
- "rustls 0.23.45 (git+https://github.com/Ludea/rustls?branch=aws-lc-rs)",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -886,7 +865,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "reqwest",
- "rustls 0.23.45 (git+https://github.com/Ludea/rustls?branch=aws-lc-rs)",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -1950,7 +1929,7 @@ dependencies = [
  "http",
  "hyper",
  "hyper-util",
- "rustls 0.23.45 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls",
  "tokio",
  "tokio-rustls",
  "tower-service",
@@ -3388,7 +3367,7 @@ dependencies = [
  "mime",
  "percent-encoding",
  "pin-project-lite",
- "rustls 0.23.45 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
  "serde",
@@ -3515,21 +3494,9 @@ version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
+ "aws-lc-rs",
  "once_cell",
  "ring",
- "rustls-pki-types",
- "rustls-webpki",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "rustls"
-version = "0.23.45"
-source = "git+https://github.com/Ludea/rustls?branch=aws-lc-rs#062b1462d3a3a1fd6dd989becd8a91b0ec4a4118"
-dependencies = [
- "aws-lc-rs 1.18.1",
- "once_cell",
  "rustls-pki-types",
  "rustls-webpki",
  "subtle",
@@ -3577,7 +3544,7 @@ dependencies = [
  "jni",
  "log",
  "once_cell",
- "rustls 0.23.45 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls",
  "rustls-native-certs",
  "rustls-platform-verifier-android",
  "rustls-webpki",
@@ -3599,7 +3566,7 @@ version = "0.103.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
 dependencies = [
- "aws-lc-rs 1.18.0",
+ "aws-lc-rs",
  "ring",
  "rustls-pki-types",
  "untrusted",
@@ -4192,7 +4159,7 @@ version = "0.26.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9cc2678c2cdd569ef8215e2afd7954ada2ae20b4fdd2c5fe6139a3b02d105db"
 dependencies = [
- "rustls 0.23.45 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls",
  "tokio",
 ]
 
