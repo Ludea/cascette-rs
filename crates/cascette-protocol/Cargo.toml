@@ -60,9 +60,7 @@ web-sys = { version = "0.3", features = ["console", "Window", "Storage"] }
 # wasm-bindgen-futures provides async runtime for WASM
 wasm-bindgen-futures = "0.4"
 # getrandom 0.4 (from rand 0.10) needs wasm_js for browser crypto
-getrandom = { workspace = true, features = ["wasm_js"] }
-# getrandom 0.2 (transitive from rsa 0.9) needs js for browser crypto
-getrandom_02 = { workspace = true, features = ["js"] }
+getrandom = { workspace = true }
 # js-sys for Date.now() timestamp access
 js-sys = "0.3"
 

@@ -823,7 +823,6 @@ dependencies = [
  "der",
  "digest",
  "futures",
- "getrandom 0.2.17",
  "getrandom 0.4.3",
  "hex",
  "js-sys",
