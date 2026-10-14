@@ -28,13 +28,6 @@ memmap2 = { workspace = true }
 # Compression
 flate2 = { workspace = true }
 
-# Async runtime
-tokio = { workspace = true, features = [
-  "fs",
-  "io-util",
-  "sync",
-  "rt-multi-thread",
-] }
 futures = { workspace = true }
 
 # Concurrency
@@ -61,6 +54,23 @@ winapi = { version = "0.3", features = [
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# Async runtime
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+tokio = { workspace = true, features = [
+    "fs",
+    "io-util",
+    "sync",
+    "rt-multi-thread",
+]}
+
+# Async runtime
+[target.'cfg(target_os = "wasi")'.dependencies]
+tokio = { workspace = true, features = [
+  "io-util",
+  "sync",
+]}
+wasip3-fs = { git = "https://github.com/Ludea/wasi-fs" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
