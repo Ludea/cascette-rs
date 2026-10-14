@@ -13,7 +13,11 @@ use std::sync::Arc;
 
 use cascette_crypto::EncodingKey;
 use parking_lot::RwLock;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use tracing::{debug, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::container::residency::ResidencyContainer;
 use crate::container::{AccessMode, Container};
@@ -358,14 +362,12 @@ impl DynamicContainer {
 
         // Ensure the storage directory exists for writable containers
         if self.access_mode.can_write() {
-            tokio::fs::create_dir_all(&self.storage_path)
-                .await
-                .map_err(|e| {
-                    StorageError::Archive(format!(
-                        "failed to create storage directory {}: {e}",
-                        self.storage_path.display()
-                    ))
-                })?;
+            fs::create_dir_all(&self.storage_path).await.map_err(|e| {
+                StorageError::Archive(format!(
+                    "failed to create storage directory {}: {e}",
+                    self.storage_path.display()
+                ))
+            })?;
         }
 
         // Load index files (KMT).

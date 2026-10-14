@@ -23,8 +23,11 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "wasi"))]
 use tokio::fs;
 use tracing::{debug, info, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 pub use update::UpdateStatus;
 use update::{UPDATE_SECTION_ALIGNMENT, UpdateEntry, UpdateSection};

@@ -15,8 +15,11 @@ use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+#[cfg(not(target_os = "wasi"))]
 use tokio::fs;
 use tracing::{debug, info, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 /// Maximum archive size limit per CASC specification (256 GiB)
 const MAX_ARCHIVE_SIZE: u64 = 256 * 1024 * 1024 * 1024;

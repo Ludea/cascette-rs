@@ -10,12 +10,15 @@
 
 use std::path::PathBuf;
 
-use parking_lot::RwLock;
-use tracing::{debug, warn};
-
 use crate::container::{AccessMode, Container};
 use crate::kmt::key_state::ResidencyDb;
 use crate::{Result, StorageError};
+use parking_lot::RwLock;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+use tracing::{debug, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 /// Residency token file name.
 ///
@@ -85,18 +88,16 @@ impl ResidencyContainer {
 
         if self.access_mode.can_write() {
             // Create directory if needed
-            tokio::fs::create_dir_all(&self.storage_path)
-                .await
-                .map_err(|e| {
-                    StorageError::Archive(format!(
-                        "failed to create residency directory {}: {e}",
-                        self.storage_path.display()
-                    ))
-                })?;
+            fs::create_dir_all(&self.storage_path).await.map_err(|e| {
+                StorageError::Archive(format!(
+                    "failed to create residency directory {}: {e}",
+                    self.storage_path.display()
+                ))
+            })?;
 
             // Create token file if it doesn't exist
             if !token_path.exists() {
-                tokio::fs::write(&token_path, b"").await.map_err(|e| {
+                fs::write(&token_path, b"").await.map_err(|e| {
                     StorageError::Archive(format!(
                         "failed to create .residency token file at {}: {e}",
                         token_path.display()

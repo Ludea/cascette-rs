@@ -23,7 +23,10 @@ use lru_file::{
     LRU_SENTINEL, LruFileEntry, LruFileHeader, deserialize, generation_to_filename, lru_file_path,
     serialize,
 };
-
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 /// LRU cache manager using a flat-array doubly-linked list.
 ///
 /// The entry array forms a doubly-linked list via `prev`/`next` index
@@ -194,7 +197,7 @@ impl LruManager {
         let data = serialize(&self.header, &self.entries);
         let path = lru_file_path(&self.data_dir, self.generation);
 
-        tokio::fs::write(&path, &data).await.map_err(|e| {
+        fs::write(&path, &data).await.map_err(|e| {
             crate::StorageError::Cache(format!(
                 "failed to write LRU checkpoint to {}: {e}",
                 path.display()
@@ -210,7 +213,7 @@ impl LruManager {
         // Delete previous generation file
         if self.prev_generation != 0 {
             let prev_path = lru_file_path(&self.data_dir, self.prev_generation);
-            if let Err(e) = tokio::fs::remove_file(&prev_path).await
+            if let Err(e) = fs::remove_file(&prev_path).await
                 && e.kind() != std::io::ErrorKind::NotFound
             {
                 warn!("failed to delete old LRU file {}: {e}", prev_path.display());
@@ -224,7 +227,7 @@ impl LruManager {
     ///
     pub async fn load_from_disk(&mut self, generation: u64) -> crate::Result<()> {
         let path = lru_file_path(&self.data_dir, generation);
-        let data = tokio::fs::read(&path).await.map_err(|e| {
+        let data = fs::read(&path).await.map_err(|e| {
             crate::StorageError::Cache(format!("failed to read LRU file {}: {e}", path.display()))
         })?;
 

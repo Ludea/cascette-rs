@@ -14,6 +14,10 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use parking_lot::RwLock;
 use tracing::{debug, info, warn};
@@ -665,18 +669,16 @@ impl HardLinkContainer {
     /// Initialize the container directory and token file.
     pub async fn initialize(&mut self) -> Result<()> {
         if self.access_mode.can_write() {
-            tokio::fs::create_dir_all(&self.storage_path)
-                .await
-                .map_err(|e| {
-                    StorageError::Archive(format!(
-                        "failed to create hard link directory {}: {e}",
-                        self.storage_path.display()
-                    ))
-                })?;
+            fs::create_dir_all(&self.storage_path).await.map_err(|e| {
+                StorageError::Archive(format!(
+                    "failed to create hard link directory {}: {e}",
+                    self.storage_path.display()
+                ))
+            })?;
 
             let token_path = self.storage_path.join(TRIE_DIRECTORY_TOKEN);
             if !token_path.exists() {
-                tokio::fs::write(&token_path, b"").await.map_err(|e| {
+                fs::write(&token_path, b"").await.map_err(|e| {
                     StorageError::Archive(format!(
                         "failed to create .trie_directory token at {}: {e}",
                         token_path.display()

@@ -21,9 +21,12 @@
 //! - `Version!STRING:0` -- build version string
 //! - `Product!STRING:0` -- product code (e.g., "wow", "wow_classic")
 
-use std::path::Path;
-
 use cascette_formats::bpsv::{BpsvDocument, parse};
+use std::path::Path;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::{Result, StorageError};
 
@@ -47,7 +50,7 @@ impl BuildInfoFile {
 
     /// Read and parse a `.build.info` file from disk.
     pub async fn from_path(path: &Path) -> Result<Self> {
-        let content = tokio::fs::read_to_string(path).await.map_err(|e| {
+        let content = fs::read_to_string(path).await.map_err(|e| {
             StorageError::Io(std::io::Error::other(format!(
                 "failed to read .build.info at {}: {e}",
                 path.display()
