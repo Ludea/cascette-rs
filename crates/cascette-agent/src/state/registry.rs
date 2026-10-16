@@ -7,11 +7,12 @@ use tracing::debug;
 
 use crate::error::{AgentError, AgentResult};
 use crate::models::product::{Product, ProductStatus};
-use crate::server::router::ProductDownloadConfig;
+use crate::handlers::ProductDownloadConfig;
 
 use super::db::Database;
 
 /// Product registry backed by SQLite.
+#[derive(Debug, Clone)]
 pub struct ProductRegistry {
     db: Database,
 }
