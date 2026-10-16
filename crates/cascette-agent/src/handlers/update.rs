@@ -40,7 +40,7 @@ async fn update(
         Ok(p) if p.status != ProductStatus::Installed => Err(AGENT_ERROR_INVALID_REQUEST),
         Err(_) => Err(AGENT_ERROR_INVALID_REQUEST),
         Ok(_) => Ok(json!({})),
-    };
+    }?;
 
     let priority = Priority::from_agent_priority(body.priority);
     let params = if body.build_config.is_some() || body.cdn_config.is_some() {
