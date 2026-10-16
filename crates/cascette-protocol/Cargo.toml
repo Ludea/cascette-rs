@@ -49,9 +49,6 @@ cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 
 reqwest = { workspace = true }
 rustls = { workspace = true }
-cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
-cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
-cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
 
 # WASM platform dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -65,9 +62,6 @@ gloo-timers = { version = "0.4", features = ["futures"] }
 # web-sys for browser APIs (console logging, localStorage for caching)
 web-sys = { version = "0.3", features = ["console", "Window", "Storage"] }
 # WASM-compatible internal dependencies (cascette-crypto, cascette-formats, cascette-cache support WASM)
-cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
-cascette-formats = { version = "0.2.0", path = "../cascette-formats" }
-cascette-cache = { version = "0.2.0", path = "../cascette-cache" }
 # js-sys for Date.now() timestamp access
 js-sys = "0.3"
 
