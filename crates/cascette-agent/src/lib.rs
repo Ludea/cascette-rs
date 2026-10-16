@@ -38,7 +38,7 @@ pub mod executor;
 pub mod models;
 pub mod observability;
 pub mod process_detection;
-pub mod server;
+pub mod handlers;
 pub mod session;
 pub mod state;
 

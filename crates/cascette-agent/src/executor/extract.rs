@@ -11,7 +11,7 @@ use tracing::{info, warn};
 
 use crate::error::{AgentError, AgentResult};
 use crate::models::operation::{Operation, OperationState};
-use crate::server::router::AppState;
+use crate::handlers::AppState;
 
 use super::helpers::{ProgressBridge, build_install_config, resolve_product_metadata};
 

@@ -24,7 +24,7 @@ use cascette_protocol::product_config;
 use crate::error::{AgentError, AgentResult};
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::{InstallationMode, ProductStatus};
-use crate::server::router::AppState;
+use crate::handlers::AppState;
 
 use super::helpers::{
     ProgressBridge, build_install_config, build_launcher_install_config, resolve_cdn_info,

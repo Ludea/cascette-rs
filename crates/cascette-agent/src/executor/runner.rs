@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 
 use crate::error::AgentResult;
 use crate::models::operation::{ErrorInfo, OperationState, OperationType};
-use crate::server::router::AppState;
+use crate::handlers::AppState;
 
 /// Background operation runner that processes queued operations.
 pub struct OperationRunner {

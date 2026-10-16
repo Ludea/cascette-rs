@@ -10,7 +10,7 @@ use cascette_installation::{VerifyConfig, VerifyMode, VerifyPipeline};
 use crate::error::{AgentError, AgentResult};
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
-use crate::server::router::AppState;
+use crate::handlers::AppState;
 
 use super::helpers::ProgressBridge;
 

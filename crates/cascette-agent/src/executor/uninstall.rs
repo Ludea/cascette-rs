@@ -13,7 +13,7 @@ use crate::error::{AgentError, AgentResult};
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
 use crate::process_detection;
-use crate::server::router::AppState;
+use crate::handlers::AppState;
 
 /// Product-specific files removed on uninstall.
 ///
