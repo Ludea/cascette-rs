@@ -1,7 +1,7 @@
 //! Alternate container leeching.
 //!
 //! Copies CASC data from a secondary installation instead of downloading
-//! from CDN. Matches agent.exe behavior for shared installations (e.g.,
+//! from CDN. Used for shared installations (e.g.,
 //! PTR client reusing live client archives).
 
 use std::path::PathBuf;

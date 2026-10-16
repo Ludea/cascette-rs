@@ -148,6 +148,21 @@ pub struct Product {
     pub subfolder: Option<String>,
     /// Patch region hint from the launcher (e.g., "us").
     pub patch_region_hint: Option<String>,
+    /// ISO 3166-1 alpha-3 account country (e.g., "BGR").
+    /// Set via `POST /agent/{product}` override endpoint.
+    pub account_country: Option<String>,
+    /// ISO 3166-1 alpha-2 GeoIP country (e.g., "BG").
+    /// Set via `POST /agent/{product}` override endpoint.
+    pub geo_ip_country: Option<String>,
+    /// Product config hash (hex) from Ribbit versions BPSV.
+    /// Points to a JSON file on CDN containing `launcher_install_info`.
+    pub product_config_hash: Option<String>,
+    /// Target platform (e.g., "Windows", "OSX").
+    /// Defaults to "Windows" when not set (backward compatible with pre-v8 schema).
+    pub platform: Option<String>,
+    /// Target architecture (e.g., "x86_64", "arm64").
+    /// Defaults to "x86_64" when not set (backward compatible with pre-v8 schema).
+    pub architecture: Option<String>,
     /// When the product was registered.
     pub created_at: DateTime<Utc>,
     /// Last status change.
@@ -177,6 +192,11 @@ impl Product {
             cdn_config: None,
             subfolder: None,
             patch_region_hint: None,
+            account_country: None,
+            geo_ip_country: None,
+            product_config_hash: None,
+            platform: None,
+            architecture: None,
             created_at: now,
             updated_at: now,
         }

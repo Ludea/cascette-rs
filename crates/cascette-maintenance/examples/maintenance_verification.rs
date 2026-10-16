@@ -9,7 +9,7 @@
 //!   CASCETTE_WOW_PATH  Path to a local WoW installation root (required)
 //!
 //! Usage:
-//!   CASCETTE_WOW_PATH=~/Downloads/wow_classic/1.13.2.31650.windows-win64 \
+//!   CASCETTE_WOW_PATH=~/Downloads/battle.net/wow_classic/1.13.2.31650.windows-win64 \
 //!     cargo run -p cascette-maintenance --example maintenance_verification \
 //!       --features local-install
 

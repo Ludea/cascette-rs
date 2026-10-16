@@ -394,26 +394,6 @@ fn detect_root_version(data: &[u8]) -> RootVersion {
 }
 ```
 
-## Parser Implementation Status
-
-The Python parser (cascette-py) currently supports:
-
-- Version detection (MFST/TSFM magic)
-
-- Version 1-3 parsing
-
-- Block-based extraction
-
-- Content key retrieval
-
-- Delta encoding detection (identifies but doesn't decode)
-
-The parser can extract FileDataID to content key mappings from all current
-WoW root file versions.
-
-See <https://github.com/wowemulation-dev/cascette-py> for the Python
-implementation.
-
 ## Common Issues
 
 1. **V2 block header size**: V2+ uses a 17-byte block header, not 12 bytes like

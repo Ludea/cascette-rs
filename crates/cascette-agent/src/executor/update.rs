@@ -8,9 +8,9 @@ use tracing::{info, warn};
 use cascette_client_storage::Installation;
 
 use crate::error::{AgentError, AgentResult};
-use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
+use crate::server::router::AppState;
 
 use super::helpers::{
     ProgressBridge, build_install_config, build_update_config, resolve_cdn_info,
@@ -42,6 +42,8 @@ pub async fn execute(
 
     let region = product.region.as_deref().unwrap_or("us");
     let locale = product.locale.as_deref().unwrap_or(&state.config.locale);
+    let platform = product.platform.clone();
+    let architecture = product.architecture.clone();
 
     // Transition product to Updating
     {
@@ -173,6 +175,8 @@ pub async fn execute(
             base_cdn.clone(),
             target_build_config.clone(),
             target_cdn_config.clone(),
+            platform.as_deref(),
+            architecture.as_deref(),
         );
         update_config.key_store = Some(key_provider.clone());
         update_config.game_subfolder.clone_from(&product.subfolder);
@@ -214,6 +218,10 @@ pub async fn execute(
             Some(target_build_config.clone()),
             Some(target_cdn_config.clone()),
             None,
+            None,
+            None,
+            platform.as_deref(),
+            architecture.as_deref(),
         );
         install_config.key_store = Some(key_provider.clone());
 

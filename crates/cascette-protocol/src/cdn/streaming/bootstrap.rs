@@ -166,7 +166,7 @@ impl CdnBootstrap {
 
     /// Parse CDN hosts from space-separated host list.
     ///
-    /// Host entries may include query parameters matching Agent.exe behavior:
+    /// Host entries may include query parameters matching Blizzard Agent behavior:
     /// - `fallback=1` — marks the server as a fallback (deprioritized)
     /// - `strict=1` — prevents fallback to other server groups
     /// - `maxhosts=N` — limits the number of hosts used from this group
@@ -193,7 +193,7 @@ impl CdnBootstrap {
 
             let mut server = CdnServer::new(hostname.to_string(), supports_https, priority);
 
-            // Parse query parameters matching Agent.exe behavior
+            // Parse query parameters matching Blizzard Agent behavior
             if let Some(params_str) = params {
                 for param in params_str.split('&') {
                     if let Some((key, value)) = param.split_once('=') {

@@ -89,7 +89,7 @@ pub enum ESpec {
     Encrypted {
         /// Encryption key name (8 bytes as 16 hex chars)
         key: String,
-        /// Initialization vector (1-8 bytes, zero-padded to 8 by Agent.exe)
+        /// Initialization vector (1-8 bytes, zero-padded to 8)
         iv: Vec<u8>,
         /// Nested specification for encrypted data
         spec: Box<ESpec>,

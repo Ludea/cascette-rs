@@ -1,7 +1,7 @@
 //! Download coordinator with priority ordering and callbacks.
 //!
 //! Extends the base download executor with update-specific features:
-//! priority-ordered processing, three-level callbacks matching agent.exe,
+//! priority-ordered processing, three-level callbacks,
 //! partial file resume, and pre-download leech checking.
 
 use std::cmp::Ordering;
@@ -25,7 +25,7 @@ use crate::progress::ProgressEvent;
 
 /// Callbacks for download progress tracking.
 ///
-/// Matches agent.exe's three download callbacks.
+/// Three-level download progress callbacks.
 pub trait DownloadCallbacks: Send + Sync {
     /// Called as data arrives during a download.
     fn on_data_received(&self, ekey: &[u8; 16], bytes_received: u64, total_bytes: u64);
@@ -400,6 +400,7 @@ where
 
                         progress(ProgressEvent::FileComplete {
                             path: request.path.clone(),
+                            bytes,
                         });
                     }
                     Err(e) => {

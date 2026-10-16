@@ -36,6 +36,13 @@ pub struct ArtifactDescriptor {
 
     /// Priority value (lower = higher priority).
     pub priority_value: i8,
+
+    /// Whether this artifact is a loose install manifest file.
+    ///
+    /// Install manifest files (executables, DLLs, locale packs) must be written
+    /// directly to the filesystem at `<install_path>/<subfolder>/<path>`.
+    /// Download manifest files are CASC archive blobs and go into CASC storage.
+    pub is_loose_file: bool,
 }
 
 /// Classification result for the artifact set.
@@ -43,6 +50,9 @@ pub struct ArtifactDescriptor {
 pub struct ArtifactSet {
     /// Artifacts that need to be downloaded.
     pub required: Vec<ArtifactDescriptor>,
+
+    /// Number of entries matched by the tag query (before dedup against local keys).
+    pub tag_matched: usize,
 
     /// Number of artifacts already present in local storage.
     pub already_present: usize,
@@ -87,10 +97,10 @@ pub fn classify_artifacts<S: BuildHasher>(
         install.entries.iter().enumerate().collect::<Vec<_>>()
     } else {
         // Use tag query with OR-within-group, AND-between-groups logic
-        // matching agent.exe's TagTable::ApplyTagQuery behavior.
         install.get_files_for_tag_query(tags)
     };
 
+    let tag_matched = files.len();
     let mut required = Vec::new();
     let mut already_present: usize = 0;
     let mut unresolved: usize = 0;
@@ -123,6 +133,7 @@ pub fn classify_artifacts<S: BuildHasher>(
             file_size: entry.file_size,
             priority,
             priority_value,
+            is_loose_file: true,
         });
     }
 
@@ -138,6 +149,7 @@ pub fn classify_artifacts<S: BuildHasher>(
 
     Ok(ArtifactSet {
         required,
+        tag_matched,
         already_present,
         unresolved,
     })
@@ -159,10 +171,10 @@ pub fn classify_download_artifacts<S: BuildHasher>(
         download.entries.iter().enumerate().collect::<Vec<_>>()
     } else {
         // Use tag query with OR-within-group, AND-between-groups logic
-        // matching agent.exe's TagTable::ApplyTagQuery behavior.
         download.entries_by_tag_query(tags)
     };
 
+    let tag_matched = entries.len();
     let mut required = Vec::new();
     let mut already_present: usize = 0;
 
@@ -184,6 +196,7 @@ pub fn classify_download_artifacts<S: BuildHasher>(
             file_size: entry.file_size.as_u64() as u32,
             priority,
             priority_value,
+            is_loose_file: false,
         });
     }
 
@@ -198,6 +211,7 @@ pub fn classify_download_artifacts<S: BuildHasher>(
 
     Ok(ArtifactSet {
         required,
+        tag_matched,
         already_present,
         unresolved: 0,
     })
@@ -206,11 +220,10 @@ pub fn classify_download_artifacts<S: BuildHasher>(
 /// Classify download manifest entries for backfill, promoting all remaining
 /// files to the highest download priority.
 ///
-/// Agent.exe reads per-entry flag bytes from a local DL manifest copy to find
-/// files that were partially or not-yet-downloaded, then promotes them to the
-/// top of the queue. cascette uses atomic writes so there is no partial-write
-/// state, but the intent is the same: backfill should download remaining files
-/// as fast as possible, ignoring their manifest-assigned priority buckets.
+/// During backfill, remaining files are promoted to the top of the download
+/// queue regardless of their manifest-assigned priority. cascette uses atomic
+/// writes so there is no partial-write state, but the intent is the same:
+/// backfill downloads remaining files as fast as possible.
 ///
 /// All entries not present in `local_keys` are assigned `priority_value = i8::MIN`
 /// so they sort before any freshly-installed files that respect manifest priority.
@@ -225,6 +238,7 @@ pub fn classify_backfill_artifacts<S: BuildHasher>(
         download.entries_by_tag_query(tags)
     };
 
+    let tag_matched = entries.len();
     let mut required = Vec::new();
     let mut already_present: usize = 0;
 
@@ -236,9 +250,7 @@ pub fn classify_backfill_artifacts<S: BuildHasher>(
             continue;
         }
 
-        // Promote all remaining files to highest priority. This matches
-        // Agent.exe's backfill behavior: partially-downloaded files (any
-        // flag byte != 0) are placed at the front of the download queue.
+        // Promote all remaining files to highest priority for backfill.
         required.push(ArtifactDescriptor {
             path: ekey_hex.clone(),
             content_key: ContentKey::from_bytes([0u8; 16]),
@@ -246,6 +258,7 @@ pub fn classify_backfill_artifacts<S: BuildHasher>(
             file_size: entry.file_size.as_u64() as u32,
             priority: PriorityCategory::Critical,
             priority_value: i8::MIN,
+            is_loose_file: false,
         });
     }
 
@@ -255,6 +268,7 @@ pub fn classify_backfill_artifacts<S: BuildHasher>(
 
     Ok(ArtifactSet {
         required,
+        tag_matched,
         already_present,
         unresolved: 0,
     })
@@ -294,6 +308,7 @@ mod tests {
             file_size: 100,
             priority: PriorityCategory::Normal,
             priority_value,
+            is_loose_file: false,
         }
     }
 

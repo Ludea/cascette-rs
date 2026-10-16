@@ -12,7 +12,21 @@ pub enum ProgressEvent {
         product: String,
     },
 
-    /// Metadata resolution completed.
+    /// A manifest file is being downloaded from CDN.
+    ManifestDownloading {
+        /// Manifest type (e.g., "build config", "encoding", "install", "download").
+        manifest_type: String,
+    },
+
+    /// A manifest file has been downloaded and parsed.
+    ManifestComplete {
+        /// Manifest type.
+        manifest_type: String,
+        /// Number of entries in the manifest (0 for configs).
+        entries: usize,
+    },
+
+    /// Metadata resolution completed — all manifests downloaded and classified.
     MetadataResolved {
         /// Number of artifacts identified.
         artifacts: usize,
@@ -34,6 +48,20 @@ pub enum ProgressEvent {
         archive_key: String,
     },
 
+    /// Loose file download phase started (install manifest files).
+    LooseFilePhaseStarted {
+        /// Number of loose files to download.
+        files: usize,
+        /// Total bytes for loose files.
+        total_bytes: u64,
+    },
+
+    /// Loose file download phase completed.
+    LooseFilePhaseComplete {
+        /// Files placed in product directory.
+        files_placed: usize,
+    },
+
     /// A file download has started.
     FileDownloading {
         /// File path or identifier.
@@ -46,6 +74,8 @@ pub enum ProgressEvent {
     FileComplete {
         /// File path or identifier.
         path: String,
+        /// Bytes downloaded for this file.
+        bytes: u64,
     },
 
     /// A file download failed.
@@ -63,6 +93,9 @@ pub enum ProgressEvent {
         /// Number of remaining files.
         remaining: usize,
     },
+
+    /// Layout files written (.build.info, configs).
+    LayoutWritten,
 
     /// A verification result for a single file.
     VerifyResult {

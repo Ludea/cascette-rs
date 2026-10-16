@@ -3,6 +3,7 @@
 //! Data archives contain BLTE-encoded game content.
 
 use crate::storage::local_header::{LOCAL_HEADER_SIZE, LocalHeader};
+use crate::storage::segment::SEGMENT_SIZE;
 use crate::{Result, StorageError};
 use cascette_crypto::{ContentKey, EncodingKey};
 use cascette_formats::CascFormat;
@@ -21,8 +22,14 @@ use tracing::{debug, info, warn};
 #[cfg(target_os = "wasi")]
 use wasip3_fs as fs;
 
-/// Maximum archive size limit per CASC specification (256 GiB)
-const MAX_ARCHIVE_SIZE: u64 = 256 * 1024 * 1024 * 1024;
+/// Maximum size of a single data archive (.data) file.
+///
+/// The IDX entry storage offset uses `FileOffsetBits = 30` bits for the
+/// within-archive byte offset and the remaining upper bits for the archive
+/// segment index. `SEGMENT_SIZE = 0x4000_0000` (1 GiB) is the maximum
+/// addressable offset with 30 bits. Reference WoW Classic installations keep
+/// each data.NNN file at roughly 1 GiB, consistent with this limit.
+const MAX_ARCHIVE_SIZE: u64 = SEGMENT_SIZE;
 
 /// Archive file manager for .data files
 pub struct ArchiveManager {
@@ -271,34 +278,18 @@ impl ArchiveManager {
         data: &[u8],
         mode: CompressionMode,
     ) -> Result<(u16, u32, u32, [u8; 16])> {
-        // Select archive with space
-        let archive_id = self.select_archive_for_write();
-
         // BLTE-encode the data (even uncompressed data gets a BLTE wrapper)
         let blte_data = Self::compress_blte_with_mode(data, mode)?;
 
         // Compute encoding key as MD5(blte_data) — content-addressable
         let encoding_key = EncodingKey::from_data(&blte_data);
 
-        // Build the 30-byte local header
-        let blte_size = u32::try_from(blte_data.len())
-            .map_err(|e| StorageError::Archive(format!("BLTE data too large: {e}")))?;
-
-        // Combined size: 30-byte header + BLTE data
+        // Total entry size: 30-byte local header + BLTE data
         let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
             .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
 
-        // Validate that adding this data won't exceed archive size limits
-        let current_size = {
-            let positions = self.write_positions.read();
-            *positions.get(&archive_id).unwrap_or(&0)
-        };
-
-        if current_size + u64::from(total_size) > MAX_ARCHIVE_SIZE {
-            return Err(StorageError::Archive(
-                "Adding data would exceed maximum archive size (256 GiB)".to_string(),
-            ));
-        }
+        // Select archive that has space for this specific write size.
+        let archive_id = self.select_archive_for_write_sized(u64::from(total_size));
 
         // Get or create archive file
         if !self.archives.contains_key(&archive_id) {
@@ -311,8 +302,17 @@ impl ArchiveManager {
             *positions.get(&archive_id).unwrap_or(&0)
         };
 
-        // Build local header with checksums (needs write position for checksum_b)
-        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size, offset as usize);
+        // Global offset = segment base + file offset. Used for header checksums.
+        let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
+
+        // Build local header with checksums.
+        // encoded_size includes the 30-byte header itself.
+        let header = LocalHeader::new(
+            *encoding_key.as_bytes(),
+            total_size,
+            global_offset as usize,
+            0,
+        );
         let header_bytes = header.to_bytes();
 
         // Write local header + BLTE data
@@ -345,29 +345,15 @@ impl ArchiveManager {
     ///
     /// Returns error if archive creation fails, write fails, or size limits exceeded
     pub fn write_raw_content(&mut self, blte_data: &[u8]) -> Result<(u16, u32, u32, [u8; 16])> {
-        let archive_id = self.select_archive_for_write();
-
         // Compute encoding key as MD5(blte_data)
         let encoding_key = EncodingKey::from_data(blte_data);
 
         // Build the 30-byte local header
-        let blte_size = u32::try_from(blte_data.len())
-            .map_err(|e| StorageError::Archive(format!("BLTE data too large: {e}")))?;
-
         let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
             .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
 
-        // Validate size limits
-        let current_size = {
-            let positions = self.write_positions.read();
-            *positions.get(&archive_id).unwrap_or(&0)
-        };
-
-        if current_size + u64::from(total_size) > MAX_ARCHIVE_SIZE {
-            return Err(StorageError::Archive(
-                "Adding data would exceed maximum archive size (256 GiB)".to_string(),
-            ));
-        }
+        // Select archive that has space for this specific write size.
+        let archive_id = self.select_archive_for_write_sized(u64::from(total_size));
 
         if !self.archives.contains_key(&archive_id) {
             self.create_archive(archive_id)?;
@@ -378,7 +364,15 @@ impl ArchiveManager {
             *positions.get(&archive_id).unwrap_or(&0)
         };
 
-        let header = LocalHeader::new(*encoding_key.as_bytes(), blte_size, offset as usize);
+        // Global offset = segment base + file offset. Used for header checksums.
+        let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
+
+        let header = LocalHeader::new(
+            *encoding_key.as_bytes(),
+            total_size,
+            global_offset as usize,
+            0,
+        );
         let header_bytes = header.to_bytes();
 
         let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
@@ -394,45 +388,125 @@ impl ArchiveManager {
         let offset_u32 = u32::try_from(offset)
             .map_err(|e| StorageError::Archive(format!("Offset too large: {e}")))?;
 
+        // IDX encoded_size includes the 30-byte local header.
         Ok((archive_id, offset_u32, total_size, *encoding_key.as_bytes()))
     }
 
-    /// Select archive for writing with proper CASC size limits
-    fn select_archive_for_write(&self) -> u16 {
-        // Find archive with space under the 256 GiB CASC limit
+    /// Write pre-encoded BLTE data with an explicit encoding key.
+    ///
+    /// Like `write_raw_content` but uses the provided `ekey` for the local
+    /// header instead of computing `MD5(blte_data)`. Use for bootstrap files
+    /// where the ekey is known from the build config.
+    ///
+    /// Returns `(archive_id, offset, total_size)` where total_size
+    /// includes the 30-byte local header.
+    pub fn write_raw_content_with_ekey(
+        &mut self,
+        blte_data: &[u8],
+        ekey: &[u8; 16],
+    ) -> Result<(u16, u32, u32)> {
+        let total_size = u32::try_from(LOCAL_HEADER_SIZE + blte_data.len())
+            .map_err(|e| StorageError::Archive(format!("Total data too large: {e}")))?;
+
+        let archive_id = self.select_archive_for_write_sized(u64::from(total_size));
+
+        if !self.archives.contains_key(&archive_id) {
+            self.create_archive(archive_id)?;
+        }
+
+        let offset = {
+            let positions = self.write_positions.read();
+            *positions.get(&archive_id).unwrap_or(&0)
+        };
+
+        let global_offset = u64::from(archive_id) * SEGMENT_SIZE + offset;
+
+        let header = LocalHeader::new(*ekey, total_size, global_offset as usize, 0);
+        let header_bytes = header.to_bytes();
+
+        let mut combined = Vec::with_capacity(LOCAL_HEADER_SIZE + blte_data.len());
+        combined.extend_from_slice(&header_bytes);
+        combined.extend_from_slice(blte_data);
+        self.write_to_archive(archive_id, offset, &combined)?;
+
+        {
+            let mut positions = self.write_positions.write();
+            positions.insert(archive_id, offset + u64::from(total_size));
+        }
+
+        let offset_u32 = u32::try_from(offset)
+            .map_err(|e| StorageError::Archive(format!("Offset too large: {e}")))?;
+
+        // IDX encoded_size includes the 30-byte local header.
+        Ok((archive_id, offset_u32, total_size))
+    }
+
+    /// Select archive for writing that has room for `needed_bytes`.
+    ///
+    /// Scans existing archives for one whose current write position plus
+    /// `needed_bytes` fits within `MAX_ARCHIVE_SIZE`. Returns the ID of a new
+    /// archive (next sequential number) if none has space.
+    fn select_archive_for_write_sized(&self, needed_bytes: u64) -> u16 {
         let positions = self.write_positions.read();
 
-        // Check existing archives for available space
         for (id, &pos) in positions.iter() {
-            // Use archives under 256 GiB limit with some buffer
-            if pos < MAX_ARCHIVE_SIZE - (100 * 1024 * 1024) {
-                // Leave 100MB buffer
+            if pos + needed_bytes <= MAX_ARCHIVE_SIZE {
                 return *id;
             }
         }
 
-        // Create new archive if all are at capacity
+        // All existing archives are full for this write. Allocate the next one.
         if positions.len() < usize::from(u16::MAX) {
             u16::try_from(positions.len()).unwrap_or(u16::MAX)
         } else {
-            // Fallback to archive 0 if we somehow hit the u16 limit
             0
         }
     }
 
-    /// Create a new archive file
+    /// Segment header size: 16 reconstruction header slots x 30 bytes each.
+    /// Reserved at the start of each data.NNN segment file.
+    /// Reference: `kSegmentHeaderSize = 480` in `dynamic_storage.h`.
+    const SEGMENT_HEADER_SIZE: u64 = 480;
+
+    /// Create a new archive file with a 480-byte segment header.
+    ///
+    /// Generates 16 reconstruction headers (one per KMT bucket) with
+    /// keys that hash to each bucket index and valid checksums.
     fn create_archive(&self, id: u16) -> Result<()> {
         let filename = format!("data.{id:03}");
         let path = self.base_path.join(filename);
 
-        // Create empty file
-        File::create(&path)
-            .map_err(|e| StorageError::Archive(format!("Failed to create archive: {e}")))?;
+        // Compute path hash (MD5 of base path string) for segment key
+        // generation. The Blizzard agent hashes the normalized data path.
+        let path_str = self.base_path.to_string_lossy();
+        let path_hash = cascette_crypto::ContentKey::from_data(path_str.as_bytes());
+        let path_hash_bytes: [u8; 16] = *path_hash.as_bytes();
+
+        // Generate segment header with proper reconstruction headers.
+        let seg_header = crate::storage::segment::SegmentHeader::generate(id, &path_hash_bytes);
+
+        {
+            let mut file = File::create(&path)
+                .map_err(|e| StorageError::Archive(format!("Failed to create archive: {e}")))?;
+            std::io::Write::write_all(&mut file, &seg_header.to_bytes()).map_err(|e| {
+                StorageError::Archive(format!("Failed to write segment header: {e}"))
+            })?;
+        }
 
         // Open it for memory mapping
         self.open_archive(id, &path)?;
 
-        info!("Created new archive {}", id);
+        // Set initial write position past the segment header
+        {
+            let mut positions = self.write_positions.write();
+            positions.insert(id, Self::SEGMENT_HEADER_SIZE);
+        }
+
+        info!(
+            "Created new archive {} (segment header: {} bytes)",
+            id,
+            Self::SEGMENT_HEADER_SIZE
+        );
         Ok(())
     }
 
@@ -463,7 +537,8 @@ impl ArchiveManager {
         file.flush()
             .map_err(|e| StorageError::Archive(format!("Failed to flush: {e}")))?;
 
-        // Check if file grew significantly and remap if needed
+        // Remap whenever the file grew beyond the current mmap size so that
+        // subsequent reads see the new data.
         let new_size = self.get_file_size(&archive_path)?;
         let current_size = {
             let archive = self
@@ -474,17 +549,7 @@ impl ArchiveManager {
             archive.size
         };
 
-        // Remap if file grew by more than 64MB or doubled in size
-        let size_threshold = 64 * 1024 * 1024; // 64MB
-        let size_difference = new_size.saturating_sub(current_size);
-        #[allow(clippy::cast_precision_loss)]
-        let size_ratio = if current_size > 0 {
-            new_size as f64 / current_size as f64
-        } else {
-            f64::INFINITY
-        };
-
-        if size_difference > size_threshold || size_ratio > 2.0 {
+        if new_size > current_size {
             debug!(
                 "Remapping archive {} due to size change: {} -> {} bytes",
                 id, current_size, new_size
@@ -1117,7 +1182,11 @@ mod tests {
             .write_content(test_data, false)
             .expect("write_content should succeed");
 
-        assert_eq!(offset, 0, "first write should be at offset 0");
+        assert_eq!(
+            offset,
+            ArchiveManager::SEGMENT_HEADER_SIZE as u32,
+            "first write should be at segment header boundary"
+        );
 
         // Read raw bytes back — should contain local header + BLTE
         let raw = manager
@@ -1138,15 +1207,15 @@ mod tests {
         let header =
             LocalHeader::from_bytes(&raw).expect("local header should parse from raw bytes");
 
-        // Verify encoding key matches what write_content returned
+        // Verify full 16-byte encoding key matches (header stores full key reversed)
         assert_eq!(
-            header.original_encoding_key(),
-            encoding_key,
+            &header.original_encoding_key()[..],
+            &encoding_key[..],
             "encoding key in header should match returned key"
         );
 
-        // Verify size_with_header matches total_size
-        assert_eq!(header.size_with_header, total_size);
+        // encoded_size includes the 30-byte local header
+        assert_eq!(header.encoded_size, total_size);
     }
 
     #[test]
@@ -1215,12 +1284,14 @@ mod tests {
             .open_archive(archive_id, &archive_path)
             .expect("open");
 
-        // Now write content after the segment header
+        // Now write content after the segment header.
+        // The full 16-byte key survives the full-reverse round-trip.
         let encoding_key = [0xAA; 16];
+        let expected_key = encoding_key;
         let total_size = 100u32;
         let bucket = bucket_hash(&encoding_key[..9], 0);
 
-        let local_header = LocalHeader::new(encoding_key, total_size, 0);
+        let local_header = LocalHeader::new(encoding_key, total_size, 0, 0);
         let mut updated_header = manager
             .read_segment_header(archive_id)
             .expect("read_segment_header");
@@ -1236,7 +1307,7 @@ mod tests {
         let stored = read_back.bucket_header(bucket);
         assert_eq!(
             stored.original_encoding_key(),
-            encoding_key,
+            expected_key,
             "bucket {bucket} should contain the written encoding key"
         );
     }
@@ -1257,10 +1328,18 @@ mod tests {
             .open_archive(archive_id, &archive_path)
             .expect("open");
 
-        // Write a bucket entry
+        // Write a bucket entry with computed checksums.
+        // LocalHeader::new leaves checksums at 0; compute them in the correct
+        // order: checksum_a first (bytes[..0x16]), then checksum_b (bytes[..0x1A]
+        // which includes checksum_a).
         let encoding_key = [0xDD; 16];
+        let base_offset = 0;
         let bucket = bucket_hash(&encoding_key[..9], 0);
-        let local_header = LocalHeader::new(encoding_key, 500, 0);
+        let mut local_header = LocalHeader::new(encoding_key, 500, base_offset, 0);
+        let bytes_a = local_header.to_bytes();
+        local_header.checksum_a = LocalHeader::compute_checksum_a(&bytes_a);
+        let bytes_b = local_header.to_bytes();
+        local_header.checksum_b = LocalHeader::compute_checksum_b(&bytes_b, base_offset);
 
         let mut header = manager.read_segment_header(archive_id).expect("read");
         header.set_bucket_header(bucket, local_header);
@@ -1294,9 +1373,11 @@ mod tests {
             .expect("open");
 
         // Pick two keys that hash to different buckets.
-        // [0x11; 16] -> bucket 0, [0x12; 16] -> bucket 3
+        // The full 16-byte key survives the full-reverse round-trip.
         let key_a = [0x11; 16];
         let key_b = [0x12; 16];
+        let expected_key_a = key_a;
+        let expected_key_b = key_b;
         let bucket_a = bucket_hash(&key_a[..9], 0);
         let bucket_b = bucket_hash(&key_b[..9], 0);
         assert_ne!(
@@ -1306,14 +1387,14 @@ mod tests {
 
         // Write first entry
         let mut header = manager.read_segment_header(archive_id).expect("read");
-        header.set_bucket_header(bucket_a, LocalHeader::new(key_a, 100, 0));
+        header.set_bucket_header(bucket_a, LocalHeader::new(key_a, 100, 0, 1));
         manager
             .write_segment_header(archive_id, &header)
             .expect("write a");
 
         // Write second entry
         let mut header = manager.read_segment_header(archive_id).expect("read");
-        header.set_bucket_header(bucket_b, LocalHeader::new(key_b, 200, 0));
+        header.set_bucket_header(bucket_b, LocalHeader::new(key_b, 200, 0, 1));
         manager
             .write_segment_header(archive_id, &header)
             .expect("write b");
@@ -1322,12 +1403,12 @@ mod tests {
         let final_header = manager.read_segment_header(archive_id).expect("final read");
         assert_eq!(
             final_header.bucket_header(bucket_a).original_encoding_key(),
-            key_a,
+            expected_key_a,
             "bucket {bucket_a} should contain key_a"
         );
         assert_eq!(
             final_header.bucket_header(bucket_b).original_encoding_key(),
-            key_b,
+            expected_key_b,
             "bucket {bucket_b} should contain key_b"
         );
     }

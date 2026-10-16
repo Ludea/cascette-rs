@@ -1,7 +1,7 @@
 //! Adaptive CDN endpoint scoring.
 //!
 //! Tracks per-host failure weights and reorders endpoints so that
-//! healthier servers are tried first. Matches agent.exe behavior:
+//! healthier servers are tried first. Scoring formula:
 //! score = base * 0.9^failure_weight, where failure_weight accumulates
 //! based on HTTP error category.
 
@@ -39,10 +39,10 @@ impl EndpointScorer {
 
     /// Record a successful request to a host.
     ///
-    /// Does not reset weight (matching agent.exe — failures accumulate
-    /// permanently within a session). Success just means no additional penalty.
+    /// Does not reset weight (failures accumulate permanently within a
+    /// session). Success just means no additional penalty.
     pub fn record_success(&self, _host: &str) {
-        // Agent.exe does not reduce failure weight on success within a session.
+        // Failure weight is not reduced on success within a session.
         // The weight only resets on restart.
     }
 
@@ -128,7 +128,7 @@ fn failure_weight(error: &InstallationError) -> f64 {
     }
 }
 
-#[allow(clippy::match_same_arms)] // Arms kept separate to document agent.exe error categories
+#[allow(clippy::match_same_arms)] // Arms kept separate to document error categories
 fn protocol_error_weight(error: &ProtocolError) -> f64 {
     match error {
         // 429 is handled by RetryPolicy with Retry-After — no scoring penalty

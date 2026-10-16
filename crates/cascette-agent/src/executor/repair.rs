@@ -17,9 +17,9 @@ use cascette_maintenance::ExecutionMode;
 use cascette_maintenance::repair::{BuildRepairOrchestrator, RepairConfig};
 
 use crate::error::{AgentError, AgentResult};
-use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
+use crate::server::router::AppState;
 
 use super::helpers::{ProgressBridge, build_install_config, resolve_product_metadata};
 
@@ -50,6 +50,8 @@ pub async fn execute(
         .to_string();
 
     let region = product.region.as_deref().unwrap_or("us");
+    let platform = product.platform.clone();
+    let architecture = product.architecture.clone();
 
     // Transition product to Repairing
     {
@@ -90,6 +92,10 @@ pub async fn execute(
         Some(metadata.build_config.clone()),
         Some(metadata.cdn_config.clone()),
         None,
+        None,
+        None,
+        platform.as_deref(),
+        architecture.as_deref(),
     );
 
     let cdn = &*state.cdn_client;

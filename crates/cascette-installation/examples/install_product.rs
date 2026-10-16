@@ -36,8 +36,9 @@ async fn main() {
     println!("Install path: {}", config.install_path.display());
     println!("CDN path:    {}", config.cdn_path);
     println!("Region:      {}", config.region);
-    println!("Locale:      {}", config.locale);
-    println!("Platform:    {:?}", config.platform_tags);
+    println!("Tag query:   {:?}", config.tag_query);
+    println!("Tags:        {:?}", config.tag_query.tag_names());
+    println!(".build.info: {}", config.tag_query.build_info_tags());
     println!();
 
     println!("=== CDN Endpoints ===");
@@ -148,6 +149,7 @@ async fn main() {
         },
         ProgressEvent::FileComplete {
             path: "encoding_key_hex".to_string(),
+            bytes: 1_048_576,
         },
         ProgressEvent::FileFailed {
             path: "bad_key_hex".to_string(),

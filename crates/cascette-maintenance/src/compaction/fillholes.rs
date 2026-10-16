@@ -1,6 +1,6 @@
 //! Fill-holes analysis — estimates free space without moving data.
 //!
-//! Matches `casc::CompactAlgorithm::Fillholes` from the Agent.exe spec.
+//! Implements the CASC fill-holes analysis pass.
 //! This is an analysis-only pass that reports gaps in a segment without
 //! generating move operations.
 

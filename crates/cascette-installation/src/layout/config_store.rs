@@ -30,6 +30,22 @@ pub async fn write_config_files(
         write_config_file(&config_dir, hash, &data).await?;
     }
 
+    // Write patch config (from the build config's `patch-config` field).
+    // The client reads the patch config from the local cache to determine
+    // if an update is available. Without it, the client contacts the CDN
+    // to fetch it and discovers newer builds, showing an update dialog.
+    if let Some(hash) = manifests.build_config.patch_config() {
+        let hash = hash.to_string();
+        // Check if already cached
+        let patch_path = config_dir.join(&hash[..2]).join(&hash[2..4]).join(&hash);
+        if !patch_path.exists() {
+            // Download from CDN and cache
+            if let Some(ref raw_data) = manifests.patch_config_data {
+                write_config_file(&config_dir, &hash, raw_data).await?;
+            }
+        }
+    }
+
     Ok(())
 }
 

@@ -334,11 +334,11 @@ async fn test_client_parses_multi_region_responses() {
 
     let response = result.expect("Multi-region query result should be Ok");
 
-    // Verify we have 7 regions (us, eu, cn, kr, tw, sg, xx)
+    // Verify we have 5 regions (us, eu, cn, kr, tw)
     assert_eq!(
         response.rows().len(),
-        7,
-        "Response should have 7 regional rows"
+        5,
+        "Response should have 5 regional rows"
     );
 
     // Verify each region has data

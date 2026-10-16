@@ -56,14 +56,6 @@ A Ribbit protocol server for hosting and distributing custom game builds.
 Intended for mod developers and private server operators who need to serve
 their own content to clients.
 
-### Planned
-
-These features are implemented in an internal development branch and are being
-ported incrementally:
-
-- **CLI Tools**: Browse and extract files from local WoW installations, download
-  builds from CDN, mirror builds for archival
-
 ## Project Status
 
 Under active development. See [CHANGELOG.md](CHANGELOG.md) for progress.

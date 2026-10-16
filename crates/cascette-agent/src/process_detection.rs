@@ -33,6 +33,9 @@ pub fn executable_names(product_code: &str) -> &'static [&'static str] {
             "WoWClassic",
             "WoWClassic-x86_64",
         ],
+        "wow_classic_titan" | "wow_anniversary" => {
+            &["WowClassic.exe", "WoWClassic", "WoWClassic-x86_64"]
+        }
         _ => &[],
     }
 }

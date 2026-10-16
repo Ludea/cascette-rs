@@ -1,6 +1,6 @@
 //! Random key and IV generation for creating encrypted CASC content.
 //!
-//! Agent.exe delegates random number generation to the Windows
+//! The Blizzard Agent delegates random number generation to the Windows
 //! `BCryptGenRandom` API. This module uses the platform-neutral
 //! [`getrandom`] crate which maps to the same OS primitive on each
 //! platform (`getrandom(2)` on Linux, `BCryptGenRandom` on Windows,

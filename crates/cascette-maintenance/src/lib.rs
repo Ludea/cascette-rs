@@ -1,7 +1,6 @@
 //! Maintenance operations for local CASC installations.
 //!
-//! Provides four coordinated operations matching agent.exe's maintenance
-//! subsystem:
+//! Provides four coordinated maintenance operations:
 //!
 //! 1. **Preservation set** — collects all encoding keys referenced by the
 //!    current build. Protected keys are excluded from removal.

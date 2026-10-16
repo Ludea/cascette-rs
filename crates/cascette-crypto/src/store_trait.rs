@@ -189,8 +189,8 @@ impl TactKeyProvider for TactKeyStore {
 /// Chain-of-responsibility key provider.
 ///
 /// Tries multiple [`TactKeyProvider`] backends in order, returning the first
-/// hit. This matches Agent.exe's `KeyGetter::LookupKey` pattern where keys are
-/// looked up across in-memory cache, Armadillo files, and keyring config.
+/// hit. This matches how the Blizzard Agent looks up keys across in-memory
+/// cache, Armadillo files, and keyring config.
 ///
 /// Mutations (`add_key`, `remove_key`) operate on the primary (first) provider
 /// only. An empty chain returns `Ok(None)` for lookups and errors for mutations.

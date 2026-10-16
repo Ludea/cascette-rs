@@ -25,14 +25,14 @@ pub use range::{RangeDownloader, RangeError};
 
 /// Strip trailing slashes from a CDN path to prevent double slashes in URLs.
 ///
-/// Agent.exe normalizes `cdnPath` by removing trailing slashes before URL construction.
+/// Normalizes `cdnPath` by removing trailing slashes before URL construction.
 fn normalize_cdn_path(path: &str) -> &str {
     path.trim_end_matches('/')
 }
 
 /// Parse the `Retry-After` header from an HTTP response.
 ///
-/// Agent.exe reads this header on 429 responses and waits the specified duration.
+/// Reads the `Retry-After` header on 429 responses and waits the specified duration.
 /// Only the seconds (integer) format is supported. HTTP-date format is ignored.
 fn parse_retry_after(response: &reqwest::Response) -> Option<Duration> {
     response
@@ -64,8 +64,8 @@ pub struct CdnEndpoint {
 
 /// Parse a CDN server URL string, extracting the hostname and query parameters.
 ///
-/// Agent.exe's `ParseCdnServerUrl` extracts `?fallback=1`, `?strict=1`, and
-/// `?maxhosts=N` from CDN server URLs. Unknown parameters are ignored.
+/// Extracts `?fallback=1`, `?strict=1`, and `?maxhosts=N` from CDN server URLs.
+/// Unknown parameters are ignored.
 ///
 /// Returns `(host, is_fallback, strict, max_hosts)`.
 fn parse_cdn_server_url(raw_host: &str) -> (String, bool, bool, Option<u32>) {
@@ -133,6 +133,15 @@ impl CdnClient {
         })
     }
 
+    /// Access the underlying HTTP client.
+    ///
+    /// Used for operations that need direct HTTP access outside the standard
+    /// CDN content type URL scheme (e.g., fetching product config JSON from
+    /// the `ConfigPath` namespace).
+    pub fn http_client(&self) -> &HttpClient {
+        &self.http_client
+    }
+
     /// Build CDN URL from injected endpoint configuration
     fn build_url(endpoint: &CdnEndpoint, content_type: ContentType, key: &[u8]) -> String {
         let hex_key = hex::encode(key);
@@ -187,8 +196,24 @@ impl CdnClient {
         // Build URL from injected configuration (no Ribbit dependency)
         let url = Self::build_url(endpoint, content_type, key);
 
+        tracing::debug!(
+            host = %endpoint.host,
+            content_type = %content_type,
+            key = %hex_key,
+            "CDN request: GET {}",
+            url
+        );
+
         // Download with retry logic
         let data = self.download_with_retry(&url).await?;
+
+        tracing::debug!(
+            host = %endpoint.host,
+            key = %hex_key,
+            bytes = data.len(),
+            "CDN response: {} bytes",
+            data.len()
+        );
 
         // Store in cache
         self.cache.store_bytes(&cache_key, &data)?;
@@ -280,6 +305,18 @@ impl CdnClient {
     ) -> Result<Vec<u8>> {
         let url = Self::build_url(endpoint, content_type, key);
         let range_header = format!("bytes={}-{}", offset, offset + length - 1);
+        let hex_key = hex::encode(key);
+        let host = endpoint.host.clone();
+
+        tracing::debug!(
+            host = %host,
+            key = %hex_key,
+            offset,
+            length,
+            "CDN range request: GET {} Range: {}",
+            url,
+            range_header
+        );
 
         let retry_policy = RetryPolicy::default();
 
@@ -287,6 +324,8 @@ impl CdnClient {
             .execute(|| {
                 let url = url.clone();
                 let range_header = range_header.clone();
+                let host = host.clone();
+                let hex_key = hex_key.clone();
                 async move {
                     let response = self
                         .http_client
@@ -296,9 +335,32 @@ impl CdnClient {
                         .send()
                         .await?;
 
-                    match response.status() {
-                        reqwest::StatusCode::PARTIAL_CONTENT | reqwest::StatusCode::OK => {
-                            Ok(response.bytes().await?.to_vec())
+                    let status = response.status();
+                    match status {
+                        reqwest::StatusCode::PARTIAL_CONTENT => {
+                            let data = response.bytes().await?.to_vec();
+                            tracing::debug!(
+                                host = %host,
+                                key = %hex_key,
+                                status = %status,
+                                bytes = data.len(),
+                                "CDN range response: {} bytes",
+                                data.len()
+                            );
+                            Ok(data)
+                        }
+                        reqwest::StatusCode::OK => {
+                            // Server ignored the Range header and returned the full
+                            // resource.  Accepting this silently would store the
+                            // entire archive (~1 GiB) instead of the requested
+                            // slice, corrupting CASC data.  Reject so the caller
+                            // falls back to the next CDN endpoint.
+                            tracing::warn!(
+                                host = %host,
+                                key = %hex_key,
+                                "CDN range rejected: server returned 200 (full file) instead of 206"
+                            );
+                            Err(ProtocolError::RangeNotSupported)
                         }
                         reqwest::StatusCode::RANGE_NOT_SATISFIABLE => {
                             Err(ProtocolError::RangeNotSupported)
@@ -426,10 +488,78 @@ impl CdnClient {
             archive_key
         );
 
+        tracing::debug!(
+            host = %endpoint.host,
+            archive_key = %archive_key,
+            "CDN request: GET {} (archive index)",
+            url
+        );
+
         // Download with retry logic
         let data = self.download_with_retry(&url).await?;
 
+        tracing::debug!(
+            host = %endpoint.host,
+            archive_key = %archive_key,
+            bytes = data.len(),
+            "CDN response: {} bytes (archive index)",
+            data.len()
+        );
+
         // Store in cache
+        self.cache.store_bytes(&cache_key, &data)?;
+
+        Ok(data)
+    }
+
+    /// Download a patch archive index file (`.index` under `/patch/` path).
+    pub async fn download_patch_archive_index(
+        &self,
+        endpoint: &CdnEndpoint,
+        archive_key: &str,
+    ) -> Result<Vec<u8>> {
+        let cache_key = format!(
+            "cdn/{}/patch/{}/{}/{}.index",
+            normalize_cdn_path(&endpoint.path),
+            &archive_key[..2],
+            &archive_key[2..4],
+            archive_key
+        );
+
+        if let Some(cached) = self.cache.get_bytes(&cache_key)? {
+            tracing::debug!("CDN cache hit for patch archive index {}", archive_key);
+            return Ok(cached);
+        }
+
+        let scheme = endpoint.scheme.as_deref().unwrap_or("https");
+        let base_path = normalize_cdn_path(&endpoint.path);
+        let url = format!(
+            "{}://{}/{}/patch/{}/{}/{}.index",
+            scheme,
+            endpoint.host,
+            base_path,
+            &archive_key[..2],
+            &archive_key[2..4],
+            archive_key
+        );
+
+        tracing::debug!(
+            host = %endpoint.host,
+            archive_key = %archive_key,
+            "CDN request: GET {} (patch archive index)",
+            url
+        );
+
+        let data = self.download_with_retry(&url).await?;
+
+        tracing::debug!(
+            host = %endpoint.host,
+            archive_key = %archive_key,
+            bytes = data.len(),
+            "CDN response: {} bytes (patch archive index)",
+            data.len()
+        );
+
         self.cache.store_bytes(&cache_key, &data)?;
 
         Ok(data)
@@ -510,7 +640,7 @@ impl CdnClient {
     ///
     /// On any failure (network error, HTTP error, body read error), immediately
     /// tries the next endpoint with no delay. This matches the failover strategy
-    /// used by Agent.exe and TACTSharp: iterate CDN hosts on failure, don't retry
+    /// used by TACTSharp and the Blizzard Agent: iterate CDN hosts on failure, don't retry
     /// the same broken host with backoff.
     ///
     /// Returns the data from the first endpoint that succeeds, or the last error
@@ -546,10 +676,26 @@ impl CdnClient {
 
         let mut last_error = ProtocolError::AllHostsFailed;
 
-        for endpoint in endpoints {
+        for (i, endpoint) in endpoints.iter().enumerate() {
             let url = Self::build_url(endpoint, content_type, key);
+            tracing::debug!(
+                host = %endpoint.host,
+                content_type = %content_type,
+                key = %hex_key,
+                endpoint_index = i,
+                endpoint_count = endpoints.len(),
+                "CDN request: GET {}",
+                url
+            );
             match self.download_once(&url).await {
                 Ok(data) => {
+                    tracing::debug!(
+                        host = %endpoint.host,
+                        key = %hex_key,
+                        bytes = data.len(),
+                        "CDN response: {} bytes",
+                        data.len()
+                    );
                     self.cache.store_bytes(&cache_key, &data)?;
                     return Ok(data);
                 }

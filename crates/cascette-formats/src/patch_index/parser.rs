@@ -371,12 +371,17 @@ pub fn parse_patch_index_full(data: &[u8]) -> PatchIndexResult<ParsedPatchIndex>
                     espec_table = espec;
                 }
             }
-            BLOCK_TYPE_EXTENDED => {
-                // Only use block 8 if block 2 was not found
-                if !found_block2 {
-                    let (ks, ents) = parse_block8(block_data)?;
-                    key_size = ks;
-                    entries = ents;
+            BLOCK_TYPE_EXTENDED if !found_block2 => {
+                let (ks, ents) = parse_block8(block_data)?;
+                key_size = ks;
+                entries = ents;
+            }
+            BLOCK_TYPE_V3 => {
+                let (ks, ents, espec) = parse_block10(block_data)?;
+                key_size = ks;
+                entries_v3 = ents;
+                if espec.is_some() {
+                    espec_table = espec;
                 }
             }
             BLOCK_TYPE_V3 => {
@@ -388,8 +393,7 @@ pub fn parse_patch_index_full(data: &[u8]) -> PatchIndexResult<ParsedPatchIndex>
                 }
             }
             // Block type 1 (config) and unknown types are skipped.
-            // Agent.exe logs "Unknown Patch Index block. BlockId:%u"
-            // for unrecognized types but does not fail.
+            // Unrecognized block types are ignored without error.
             _ => {}
         }
     }

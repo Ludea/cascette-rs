@@ -184,16 +184,11 @@ impl Server {
 
         tracing::info!(
             "Server initialized with {} builds across {} products",
+            state.database.try_read().map_or(0, |db| db.total_builds()),
             state
                 .database
                 .try_read()
-                .map(|db| db.total_builds())
-                .unwrap_or(0),
-            state
-                .database
-                .try_read()
-                .map(|db| db.products().len())
-                .unwrap_or(0),
+                .map_or(0, |db| db.products().len()),
         );
 
         Ok(Self {
@@ -327,8 +322,8 @@ mod tests {
 
     fn make_config(file: &NamedTempFile) -> ServerConfig {
         ServerConfig {
-            http_bind: "0.0.0.0:8080".parse().unwrap(),
-            tcp_bind: "0.0.0.0:1119".parse().unwrap(),
+            http_bind: "127.0.0.1:8080".parse().unwrap(),
+            tcp_bind: "127.0.0.1:1119".parse().unwrap(),
             builds: file.path().to_path_buf(),
             cdn_hosts: "cdn.test.com".to_string(),
             cdn_path: "test/path".to_string(),
@@ -385,6 +380,6 @@ mod tests {
         let db_file = create_test_db_file();
         let state = AppState::new(&make_config(&db_file)).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
-        assert!(state.uptime_seconds() == 0); // Should be 0 or 1 second
+        assert_eq!(state.uptime_seconds(), 0); // Should be 0 or 1 second
     }
 }

@@ -6,8 +6,8 @@ This document outlines strategies for mirroring Blizzard's CDN content for WoW
 using NGDP/CASC.
 
 > **Note**: Python code examples in this document are conceptual pseudocode
-> illustrating mirroring workflows. For working code, see the `cascette mirror`
-> CLI command or reference implementations in [References](references.md).
+> illustrating mirroring workflows. For working code, see the cascette-protocol
+> crate or reference implementations in [References](references.md).
 
 ## Rationale for Mirroring
 
@@ -26,11 +26,8 @@ Focus on World of Warcraft products:
 | Product Code | Description | Update Frequency |
 |--------------|-------------|------------------|
 | wow | Retail/Live | Weekly patches |
-| wowt | Public Test Realm | Frequent updates |
-| wow_beta | Beta servers | Daily during beta |
-| wow_classic | Classic (Wrath/Cata) | Bi-weekly |
+| wow_classic | Classic (Progressing) | Bi-weekly |
 | wow_classic_era | Classic Era (Vanilla) | Rare updates |
-| wow_classic_ptr | Classic PTR | During test cycles |
 | wow_classic_titan | Classic Titan (CN only, WotLK 3.80.x) | Unknown |
 | wow_anniversary | Classic Anniversary (TBC 2.5.x) | Unknown |
 
@@ -43,8 +40,6 @@ Based on testing CDN retention windows:
 | wow (Retail) | **14-15 days** | High - Daily checks |
 | wow_classic | **2-4 weeks** | Medium - Weekly checks |
 | wow_classic_era | **~3 months** | Low - Monthly checks |
-| wow_beta | **7-10 days** | Critical - Continuous |
-| wowt (PTR) | **10-14 days** | High - Every 2-3 days |
 
 **Critical Finding**: Retail builds disappear within 2 weeks of new patches.
 

@@ -10,7 +10,7 @@
 use std::collections::HashSet;
 use std::fmt;
 
-/// Maximum chain length, matching the agent.exe limit
+/// Maximum chain length, matching the Blizzard Agent limit
 pub const MAX_CHAIN_LENGTH: usize = 10;
 
 /// A sequence of patch steps from start to end

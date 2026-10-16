@@ -1,7 +1,7 @@
 //! Patch chain application: walks a `PatchChain` step by step, fetching patch
 //! blobs from CDN and applying the appropriate patch strategy.
 //!
-//! Three patch strategies are supported (matching agent.exe):
+//! Three patch strategies are supported:
 //! - ZBSDIFF1: full-file binary differential patching
 //! - Block patch: block-by-block BLTE chunk patching
 //! - Re-encode: decode and re-encode with a different ESpec
@@ -134,7 +134,7 @@ async fn fetch_patch_blob<S: CdnSource>(
 
 /// Determine the patch strategy and apply it.
 ///
-/// Strategy detection follows agent.exe:
+/// Strategy detection:
 /// - ZBSDIFF1: patch data starts with the "ZBSDIFF1" magic after BLTE decode
 /// - Block patch: patch data is BLTE-encoded with multiple chunks matching base
 /// - Re-encode: fallback when patch data is not ZBSDIFF1 or block-level

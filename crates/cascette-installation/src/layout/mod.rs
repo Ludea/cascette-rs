@@ -22,9 +22,13 @@ use crate::pipeline::manifests::BuildManifests;
 /// - `.product.db` (protobuf-like binary)
 /// - `Data/config/{hash_path}` for build and CDN config files
 /// - `.flavor.info` in product subfolder (if `game_subfolder` is set)
+///
+/// `total_downloaded` is passed to `.product.db` for the
+/// `UpdateProgress.totalToDownload` field.
 pub async fn write_layout(
     config: &InstallConfig,
     manifests: &BuildManifests,
+    total_downloaded: u64,
 ) -> InstallationResult<()> {
     info!("writing Battle.net directory layout");
 
@@ -32,7 +36,7 @@ pub async fn write_layout(
     build_info::write_build_info(config, manifests).await?;
 
     // Write .product.db
-    product_db::write_product_db(config, manifests).await?;
+    product_db::write_product_db(config, manifests, total_downloaded).await?;
 
     // Write config files to Data/config/
     config_store::write_config_files(config, manifests).await?;
@@ -41,6 +45,11 @@ pub async fn write_layout(
     if let Some(ref subfolder) = config.game_subfolder {
         flavor_info::write_flavor_info(&config.install_path, subfolder, &config.product).await?;
     }
+
+    // Write .patch.result to signal the client that no update is pending.
+    // Without this file, the client contacts the live patch server and
+    // refuses to start if a newer build exists.
+    tokio::fs::write(config.install_path.join(".patch.result"), b"0").await?;
 
     Ok(())
 }

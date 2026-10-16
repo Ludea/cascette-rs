@@ -1,6 +1,6 @@
 //! Repair orchestrator — validates content integrity and rebuilds damaged storage.
 //!
-//! Implements a state machine matching Agent.exe's build repair flow:
+//! Implements a state machine for the CASC build repair flow:
 //!
 //! 1. **Initialize** — set up repair context
 //! 2. **ReadBuildConfig** — validate build config availability
@@ -34,7 +34,7 @@ use crate::report::RepairReport;
 
 /// Repair state machine states.
 ///
-/// Maps to Agent.exe's repair states. Not all states perform work in
+/// Models the CASC repair states. Not all states perform work in
 /// cascette-rs; some exist for spec compatibility and future expansion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RepairState {
@@ -80,7 +80,7 @@ impl RepairState {
         }
     }
 
-    /// State number matching Agent.exe's repair state numbering.
+    /// State number matching the CASC repair state numbering.
     pub const fn state_number(self) -> u32 {
         match self {
             Self::Initialize => 0,
@@ -97,7 +97,7 @@ impl RepairState {
         }
     }
 
-    /// Map an Agent.exe state number back to a `RepairState`.
+    /// Map a CASC repair state number back to a `RepairState`.
     ///
     /// Returns `None` for unrecognised state numbers (future-proofing).
     pub const fn from_state_number(n: u32) -> Option<Self> {
@@ -562,7 +562,7 @@ impl<'a, S: CdnSource> BuildRepairOrchestrator<'a, S> {
     ///    - Level-2 dirs: 2 hex chars
     ///    - Leaf files:  14 hex chars
     ///
-    /// Mirrors `casc::TrieDirectory::CompactDirectory` in Agent.exe. In
+    /// Compacts the trie directory by removing orphaned entries. In
     /// `Execute` mode, orphaned entries are removed.
     #[allow(clippy::unused_async)]
     async fn repair_hardlink_container(&self, mode: ExecutionMode, report: &mut RepairReport) {
@@ -765,7 +765,7 @@ impl<'a, S: CdnSource> BuildRepairOrchestrator<'a, S> {
             // No corrupted keys — remove any stale PSV from a prior run.
             markers::RepairMarker::delete(&psv_path).await?;
         } else {
-            // Write the actual per-key PSV matching Agent.exe's RepairMarker.psv format.
+            // Write the actual per-key PSV in RepairMarker.psv format.
             markers::RepairMarker::write_psv(&psv_path, corrupted_keys).await?;
         }
 

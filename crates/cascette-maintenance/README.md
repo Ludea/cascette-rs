@@ -2,7 +2,7 @@
 
 Maintenance operations for local CASC installations.
 
-Provides four coordinated operations matching agent.exe's maintenance subsystem:
+Provides four coordinated maintenance operations:
 
 - **Preservation set** - Collects encoding keys referenced by the current build
 - **Garbage collection** - Removes content not in the preservation set

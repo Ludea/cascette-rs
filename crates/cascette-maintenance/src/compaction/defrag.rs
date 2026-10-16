@@ -1,6 +1,6 @@
 //! Defragmentation algorithm — shifts live data backward to fill gaps.
 //!
-//! Matches `casc::CompactAlgorithm::Defrag` from the Agent.exe spec.
+//! Implements the CASC defragmentation algorithm.
 //! Walks entries in offset order within a segment and creates move operations
 //! to close gaps left by deleted content.
 

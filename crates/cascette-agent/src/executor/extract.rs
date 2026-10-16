@@ -10,8 +10,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::error::{AgentError, AgentResult};
-use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
+use crate::server::router::AppState;
 
 use super::helpers::{ProgressBridge, build_install_config, resolve_product_metadata};
 
@@ -61,9 +61,9 @@ pub async fn execute(
         .and_then(serde_json::Value::as_str)
         .map(ToString::to_string);
 
-    // Retrieve stored build/cdn config hashes from the product registry so we
-    // can fetch manifests without hitting Ribbit again.
-    let (build_config_hash, cdn_config_hash) =
+    // Retrieve stored build/cdn config hashes and platform/architecture from
+    // the product registry so we can fetch manifests without hitting Ribbit again.
+    let (build_config_hash, cdn_config_hash, platform, architecture) =
         match state.registry.get(&operation.product_code).await {
             Ok(product) => {
                 let bc = product.build_config.ok_or_else(|| {
@@ -78,7 +78,7 @@ pub async fn execute(
                         operation.product_code
                     ))
                 })?;
-                (bc, cc)
+                (bc, cc, product.platform, product.architecture)
             }
             Err(_) => {
                 return Err(AgentError::InvalidConfig(format!(
@@ -121,6 +121,10 @@ pub async fn execute(
         Some(build_config_hash),
         Some(cdn_config_hash),
         None,
+        None,
+        None,
+        platform.as_deref(),
+        architecture.as_deref(),
     );
 
     // Fetch manifests (build config -> CDN config -> encoding -> install manifest)
@@ -136,8 +140,7 @@ pub async fn execute(
     let extract_config = cascette_installation::config::ExtractConfig {
         install_path: std::path::PathBuf::from(&install_path),
         output_path: std::path::PathBuf::from(&output_path),
-        platform_tags: install_config.platform_tags.clone(),
-        locale: locale.clone(),
+        tag_query: install_config.tag_query.clone(),
         pattern,
         max_concurrent: 8,
     };

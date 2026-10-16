@@ -16,7 +16,7 @@ pub mod update;
 use crate::validation::BinaryFormatValidator;
 use crate::{Result, StorageError};
 use binrw::Endian;
-use binrw::{BinRead, BinReaderExt, BinResult, BinWrite, BinWriterExt};
+use binrw::{BinRead, BinResult, BinWrite, BinWriterExt};
 use cascette_crypto::jenkins::hashlittle;
 use cascette_crypto::{ContentKey, EncodingKey};
 use std::collections::BTreeMap;
@@ -39,10 +39,10 @@ fn parse_archive_location<R: std::io::Read + std::io::Seek>(
     _args: (),
 ) -> BinResult<ArchiveLocation> {
     // Read high byte of archive ID
-    let index_high = u16::from(reader.read_be::<u8>()?);
+    let index_high = u16::from(binrw::BinReaderExt::read_be::<u8>(reader)?);
 
     // Read 4-byte packed field (big-endian: archive ID low bits + offset)
-    let index_low = reader.read_be::<u32>()?;
+    let index_low = binrw::BinReaderExt::read_be::<u32>(reader)?;
 
     // Extract archive ID: high byte shifted left by 2, plus top 2 bits of low word
     let archive_id = (index_high << 2) | u16::try_from(index_low >> 30).unwrap_or(0);
@@ -422,7 +422,7 @@ pub struct IndexHeader {
 
 /// Entry in an index file (18-byte IDX Journal format)
 ///
-/// Mixed endianness (verified against Agent.exe and CascLib):
+/// Mixed endianness (verified against CascLib):
 /// - Key: 9 bytes (endianness irrelevant)
 /// - StorageOffset: 5 bytes big-endian
 /// - EncodedSize: 4 bytes **little-endian**
@@ -442,9 +442,8 @@ pub struct IndexEntry {
 
     /// Encoded size of the content (4 bytes, little-endian).
     ///
-    /// Agent.exe reads this with a backward byte loop (LE) and CascLib
-    /// uses `ConvertBytesToInteger_4_LE`. This is the one field in the
-    /// 18-byte entry that is NOT big-endian.
+    /// CascLib uses `ConvertBytesToInteger_4_LE`. This is the one field
+    /// in the 18-byte entry that is NOT big-endian.
     #[brw(little)]
     pub size: u32,
 }
@@ -609,13 +608,11 @@ impl IndexManager {
     /// Read and validate the index header, returning a legacy-compatible header
     fn read_index_header(reader: &mut BufReader<File>) -> Result<(IndexHeader, usize)> {
         // Read header guarded block (size + hash)
-        let header_block: GuardedBlockHeader = reader
-            .read_le()
+        let header_block: GuardedBlockHeader = binrw::BinReaderExt::read_le(reader)
             .map_err(|e| StorageError::Index(format!("Failed to read header block: {e}")))?;
 
         // Read V2 header inside the guarded block
-        let header_v2: IndexHeaderV2 = reader
-            .read_le()
+        let header_v2: IndexHeaderV2 = binrw::BinReaderExt::read_le(reader)
             .map_err(|e| StorageError::Index(format!("Failed to read header: {e}")))?;
 
         // Validate header
@@ -655,8 +652,7 @@ impl IndexManager {
             .map_err(|e| StorageError::Index(format!("Failed to read header hash: {e}")))?;
 
         // Read entry block guarded header (8 bytes: size + hash)
-        let entry_block: GuardedBlockHeader = reader
-            .read_le()
+        let entry_block: GuardedBlockHeader = binrw::BinReaderExt::read_le(reader)
             .map_err(|e| StorageError::Index(format!("Failed to read entry block header: {e}")))?;
 
         debug!(
@@ -1048,7 +1044,9 @@ impl IndexManager {
             storage_offset_length: index.header.location_size,
             ekey_length: index.header.key_size,
             file_offset_bits: index.header.segment_bits,
-            segment_size: 1u64 << u64::from(index.header.segment_bits),
+            // Total addressable space: single-segment size (1 << offset_bits)
+            // multiplied by max archive count (256 for 8-bit archive index).
+            segment_size: (1u64 << u64::from(index.header.segment_bits)) * 256,
         };
 
         let mut header_bytes = Vec::new();
@@ -1064,9 +1062,19 @@ impl IndexManager {
             entry_data.extend_from_slice(&packed);
         }
 
-        // Compute Jenkins hashes for guarded blocks
+        // Compute Jenkins hashes for guarded blocks.
+        // Header: single hashlittle with seed 0.
         let header_hash = hashlittle(&header_bytes, 0);
-        let entry_hash = hashlittle(&entry_data, 0);
+        // Entries: incremental hashlittle2, hashing each 18-byte entry
+        // individually with the hash state carried forward.
+        let entry_hash = {
+            let mut pc: u32 = 0;
+            let mut pb: u32 = 0;
+            for chunk in entry_data.chunks(entry_size) {
+                cascette_crypto::jenkins::hashlittle2(chunk, &mut pc, &mut pb);
+            }
+            pc
+        };
 
         let header_block = GuardedBlockHeader {
             block_size: u32::try_from(header_bytes.len())
@@ -1190,6 +1198,20 @@ impl IndexManager {
             writer
                 .write_all(update_bytes)
                 .map_err(|e| StorageError::Index(format!("Failed to write update section: {e}")))?;
+        }
+
+        // Pad file to 64KB boundary (reference IDX files are always a multiple of 64KB)
+        let current_pos = writer
+            .stream_position()
+            .map_err(|e| StorageError::Index(format!("Failed to get position: {e}")))?
+            as usize;
+        let page_64k = 0x1_0000;
+        let padded_size = (current_pos + page_64k - 1) & !(page_64k - 1);
+        if padded_size > current_pos {
+            let padding = vec![0u8; padded_size - current_pos];
+            writer
+                .write_all(&padding)
+                .map_err(|e| StorageError::Index(format!("Failed to write file padding: {e}")))?;
         }
 
         writer

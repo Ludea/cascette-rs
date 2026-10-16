@@ -285,44 +285,6 @@ struct CKeyEntry {
 
 Use cases include different regional encryption and progressive quality levels.
 
-## Performance Considerations
-
-### Memory-Mapped Access
-
-For large encoding files (100MB+):
-
-```rust
-use memmap2::MmapOptions;
-
-struct EncodingFile {
-    mmap: Mmap,
-    header: EncodingHeader,
-    // ...
-}
-
-impl EncodingFile {
-    fn open(path: &Path) -> Result<Self> {
-        let file = File::open(path)?;
-        let mmap = unsafe { MmapOptions::new().map(&file)? };
-
-        // Parse header from mmap
-        let header = EncodingHeader::read(&mmap[..22])?;
-
-        Ok(Self { mmap, header })
-    }
-}
-```
-
-### Page Caching
-
-Cache frequently accessed pages:
-
-```rust
-struct PageCache {
-    entries: LruCache<u32, Arc<CKeyPage>>,
-}
-```
-
 ## Validation
 
 ### Checksums

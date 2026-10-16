@@ -1,6 +1,6 @@
 //! Armadillo DRM key file parsing
 //!
-//! Agent.exe loads Armadillo encryption keys from two sources:
+//! The Blizzard Agent loads Armadillo encryption keys from two sources:
 //!
 //! 1. **Hex string**: 32-character hex string parsed into a 16-byte key
 //! 2. **`.ak` file**: 20-byte file at `%APPDATA%\Battle.net\Armadillo\<keyname>.ak`

@@ -7,6 +7,8 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use cascette_formats::CascFormat;
+use cascette_formats::blte::BlteFile;
 use tracing::{debug, info, warn};
 
 use cascette_client_storage::Installation;
@@ -14,7 +16,7 @@ use cascette_client_storage::container::AccessMode;
 use cascette_client_storage::container::hardlink::HardLinkContainer;
 
 use crate::error::InstallationResult;
-use crate::extract::validate_output_path;
+use crate::extract::{PathNormalizer, validate_output_path};
 
 /// Handles loose file operations for a product directory.
 pub struct LooseFileHandler {
@@ -22,7 +24,13 @@ pub struct LooseFileHandler {
     install_path: PathBuf,
     hardlink_container: HardLinkContainer,
     hardlinks_supported: bool,
-    completed: HashSet<[u8; 16]>,
+    /// Paths already written. Tracking is per-destination, not per-encoding-key,
+    /// so a single content blob shared across N install manifest entries is
+    /// written to all N destinations (matching Agent.exe).
+    completed_paths: HashSet<PathBuf>,
+    normalizer: PathNormalizer,
+    /// Files written directly (BLTE decode + write, bypassing CASC round-trip).
+    direct_written: usize,
 }
 
 /// Report from loose file operations.
@@ -66,7 +74,9 @@ impl LooseFileHandler {
             install_path,
             hardlink_container,
             hardlinks_supported,
-            completed: HashSet::new(),
+            completed_paths: HashSet::new(),
+            normalizer: PathNormalizer::new(),
+            direct_written: 0,
         })
     }
 
@@ -78,12 +88,17 @@ impl LooseFileHandler {
         installation: &Installation,
         key_store: Option<&(dyn cascette_crypto::TactKeyProvider + Send + Sync)>,
     ) -> InstallationResult<()> {
-        if self.completed.contains(ekey) {
+        // Normalize install manifest paths: backslash → slash, and on
+        // case-sensitive filesystems collapse case-variant directory
+        // references onto the first casing seen (both "Utils/" and "UTILS/"
+        // appear in Blizzard manifests).
+        let normalized_path = self.normalizer.normalize(file_path);
+        let product_dir = self.install_path.join(&self.subfolder);
+        let destination = product_dir.join(&normalized_path);
+
+        if self.completed_paths.contains(&destination) {
             return Ok(());
         }
-
-        let product_dir = self.install_path.join(&self.subfolder);
-        let destination = product_dir.join(file_path);
 
         // Reject paths that escape the product directory (e.g. "../../../etc/passwd")
         validate_output_path(&product_dir, &destination)?;
@@ -101,7 +116,7 @@ impl LooseFileHandler {
             {
                 Ok(()) => {
                     debug!(path = %file_path, "hardlink created");
-                    self.completed.insert(*ekey);
+                    self.completed_paths.insert(destination);
                     return Ok(());
                 }
                 Err(e) => {
@@ -121,29 +136,115 @@ impl LooseFileHandler {
         };
         tokio::fs::write(&destination, &data).await?;
         debug!(path = %file_path, "loose file copied");
-        self.completed.insert(*ekey);
+        self.completed_paths.insert(destination);
 
         Ok(())
     }
 
-    /// Check if a file has already been completed.
-    pub fn is_completed(&self, ekey: &[u8; 16]) -> bool {
-        self.completed.contains(ekey)
+    /// Write a loose file directly from raw BLTE data.
+    ///
+    /// Decodes BLTE-encoded data and writes the result to
+    /// `<install_path>/<subfolder>/<file_path>`. Writes to `.tmp`, verifies
+    /// size, then performs an atomic rename with retries.
+    pub async fn write_loose_file(
+        &mut self,
+        _ekey: &[u8; 16],
+        file_path: &str,
+        blte_data: &[u8],
+    ) -> InstallationResult<()> {
+        // Normalize install manifest paths: backslash → slash, and on
+        // case-sensitive filesystems collapse case-variant directory
+        // references onto the first casing seen.
+        let normalized_path = self.normalizer.normalize(file_path);
+        let product_dir = self.install_path.join(&self.subfolder);
+        let destination = product_dir.join(&normalized_path);
+
+        if self.completed_paths.contains(&destination) {
+            return Ok(());
+        }
+
+        // Reject paths that escape the product directory
+        crate::extract::validate_output_path(&product_dir, &destination)?;
+
+        // Ensure parent directories exist
+        if let Some(parent) = destination.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+
+        // Decode BLTE data to raw bytes
+        let blte_file = BlteFile::parse(blte_data).map_err(|e| {
+            crate::error::InstallationError::Io(std::io::Error::other(format!(
+                "BLTE parse failed for {file_path}: {e}"
+            )))
+        })?;
+        let raw_data = blte_file.decompress().map_err(|e| {
+            crate::error::InstallationError::Io(std::io::Error::other(format!(
+                "BLTE decompress failed for {file_path}: {e}"
+            )))
+        })?;
+
+        // Write to .tmp then atomic rename (write → verify size → rename with retries).
+        let tmp_path = destination.with_extension("tmp");
+        tokio::fs::write(&tmp_path, &raw_data).await?;
+
+        // Atomic rename with retries (3 attempts)
+        let mut rename_err = None;
+        for attempt in 0..3u8 {
+            match tokio::fs::rename(&tmp_path, &destination).await {
+                Ok(()) => {
+                    rename_err = None;
+                    break;
+                }
+                Err(e) => {
+                    warn!(
+                        path = %file_path,
+                        attempt,
+                        error = %e,
+                        "loose file rename failed, retrying"
+                    );
+                    rename_err = Some(e);
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+            }
+        }
+        if let Some(e) = rename_err {
+            // Clean up temp file on final failure
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+            return Err(crate::error::InstallationError::Io(e));
+        }
+
+        debug!(path = %file_path, bytes = raw_data.len(), "loose file written directly");
+        self.completed_paths.insert(destination);
+        self.direct_written += 1;
+
+        Ok(())
+    }
+
+    /// Check if a destination path has already been written.
+    pub fn is_path_completed(&self, destination: &std::path::Path) -> bool {
+        self.completed_paths.contains(destination)
     }
 
     /// Get the current report.
     pub fn report(&self) -> LooseFileReport {
+        // Files written via write_loose_file (direct BLTE decode + write) are always "copied".
+        // Files placed via on_file_complete are hardlinked when supported, copied otherwise.
+        let via_casc = self
+            .completed_paths
+            .len()
+            .saturating_sub(self.direct_written);
         LooseFileReport {
             linked: if self.hardlinks_supported {
-                self.completed.len()
+                via_casc
             } else {
                 0
             },
-            copied: if self.hardlinks_supported {
-                0
-            } else {
-                self.completed.len()
-            },
+            copied: self.direct_written
+                + if self.hardlinks_supported {
+                    0
+                } else {
+                    via_casc
+                },
             failed: 0,
         }
     }

@@ -611,41 +611,6 @@ Product configs use variables resolved by Battle.net:
 | `%locale%` | Current locale |
 | `%uid%` | Unique installation ID |
 
-## Parser Implementation Status
-
-### Python Parser (cascette-py)
-
-**Status**: Complete
-
-**Capabilities**:
-
-- Fetches patch configs from build config references
-
-- Parses patch entry format with compression info
-
-- Analyzes entry types (system files, VFS entries)
-
-- Supports both patch and product config examination
-
-- Handles standard CDN path structure
-
-**Verified Against**:
-
-- WoW Classic 1.13.7.38631 patch config
-
-- WoW Classic 4.4.2.60142 patch config (205 entries)
-
-- WoW Classic 5.5.0.62655 patch config
-
-**Known Issues**:
-
-- None identified - both product and patch configs successfully fetched
-
-- Requires fetching build config first to get patch-config hash
-
-See <https://github.com/wowemulation-dev/cascette-py> for the Python
-implementation.
-
 ## Product Configuration Status Summary
 
 ProductConfig contains product-specific metadata and installation parameters.
@@ -671,7 +636,7 @@ These are referenced in Ribbit responses and are accessible via CDN.
 4. **CDN Config**: Get archive lists and CDN servers
 5. **Keyring Config**: Fetch encryption keys (if KeyRing column present)
 6. **Patch Config**: Retrieve update paths (rarely available)
-7. **Product Config**: Client installation metadata (may not be accessible)
+7. **Product Config**: Client installation metadata
 
 ## Implementation Considerations
 

@@ -1,31 +1,15 @@
 //! Background download (BGDL) state machine.
 //!
-//! Agent.exe implements 15 async state machine classes for containerless
+//! The Blizzard Agent uses 15 async state machine classes for containerless
 //! file lifecycle management. This module provides the BGDL orchestrator
 //! with configuration, progress tracking, speed limiting, and batch
-//! failure tracking matching agent.exe behavior.
-//!
-//! Agent.exe state classes (from binanana symbol analysis):
-//! - `ContainerlessBgdlState` -- background download orchestrator
-//! - `ContainerlessBuildGetSizeState` -- manifest parsing for size estimation
-//! - `ContainerlessBuildUpdateState` -- build update flow
-//! - `ContainerlessBuildUpdateInitState` -- update initialization
-//! - `ContainerlessBuildExtractState` -- file extraction
-//! - `ContainerlessBuildPreserveState` -- preservation during maintenance
-//! - `ContainerlessFileIdentifyState` -- content hash verification
-//! - `ContainerlessFileMakeResidentState` -- mark files as locally available
-//! - `ContainerlessFileUpdateState` -- individual file updates
-//! - `ContainerlessHeadersFetchState` -- e-header retrieval
-//! - `ContainerlessBlockExtractState` -- block-level extraction
-//! - `FileDbReadState` -- database read operations
-//! - Infrastructure: `ContainerlessBlockMover`, `LooseFileStreamer`,
-//!   `FileIdentifyQueue`, `FileUpdateQueue`
+//! failure tracking.
 
 use std::time::{Duration, Instant};
 
 /// Background download configuration.
 ///
-/// Derived from agent.exe config keys:
+/// Derived from BGDL config keys:
 /// - `default_bgdl_speed` -- default speed limit in bytes/sec
 /// - `use_default_bgdl_limit` -- whether to use the default limit
 /// - `activeBgdlKey` -- currently active BGDL key
@@ -99,7 +83,7 @@ impl BgdlProgress {
 
 /// A failed file record for batch tracking.
 ///
-/// Matches the agent.exe log format:
+/// Matches the BGDL log format:
 /// `"{n}/{total} loose files failed during batch download."`
 #[derive(Debug, Clone)]
 pub struct FailedFile {

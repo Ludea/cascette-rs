@@ -1,4 +1,4 @@
-//! Local HTTP agent service compatible with Blizzard Agent.exe (version 3.13.3).
+//! Local HTTP agent service compatible with the Blizzard Agent protocol.
 //!
 //! This crate implements a REST API on port 1120 that manages game product
 //! installations, updates, repairs, and verification. The API surface matches
@@ -35,10 +35,10 @@
 pub mod config;
 pub mod error;
 pub mod executor;
-pub mod handlers;
 pub mod models;
 pub mod observability;
 pub mod process_detection;
+pub mod server;
 pub mod session;
 pub mod state;
 

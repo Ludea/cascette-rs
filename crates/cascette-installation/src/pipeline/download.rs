@@ -1,12 +1,10 @@
 //! Priority-ordered concurrent download executor.
 //!
-//! Downloads artifacts from CDN with slot-based fan-out matching Agent.exe's
-//! `BatchDownloadUtils` pattern (0x188-byte slots, decrement-to-zero completion).
+//! Downloads artifacts from CDN with slot-based concurrent fan-out.
 //!
-//! Agent.exe submits all entries in a batch simultaneously and fires `FinalizeBatch`
-//! when the last slot's `OnStreamComplete` decrements the pending count to zero.
-//! This is equivalent to Tokio's `buffer_unordered` with concurrency bounded by
-//! `max_connections_global` (default 12, matching agent.exe's `DownloadServerSet`).
+//! All entries in a batch are submitted simultaneously. The batch completes
+//! when the last slot finishes. This maps to Tokio's `buffer_unordered` with
+//! concurrency bounded by `max_connections_global` (default 12).
 //!
 //! ## Concurrency model
 //!
@@ -20,7 +18,9 @@
 //!   each slot: try loose blob -> try archive range -> FetchOutcome
 //!   result loop (sequential):
 //!     apply scorer updates
-//!     write_raw_blte -> on_file_written -> checkpoint.mark_completed
+//!     if is_loose_file: on_file_written(artifact, inst, Some(blte_data))
+//!     else: write_raw_blte -> on_file_written(artifact, inst, None)
+//!     checkpoint.mark_completed
 //! ```
 
 use std::collections::{HashMap, HashSet};
@@ -201,7 +201,7 @@ pub fn categorize_error(error: &crate::error::InstallationError) -> FailureCateg
 }
 
 /// Result of a download operation.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DownloadReport {
     /// Number of files downloaded.
     pub downloaded: usize,
@@ -237,11 +237,10 @@ impl DownloadReport {
 
 /// Scorer event recorded by a fetch slot, applied sequentially after all slots complete.
 ///
-/// Mirrors `BatchDownloadUtils::OnStreamComplete` → `UpdateServerStats` pattern:
-/// each slot accumulates its stats and the result loop applies them to the scorer.
+/// Each slot accumulates its stats and the result loop applies them to the scorer.
 #[derive(Debug)]
 enum ScoreEvent {
-    /// Endpoint served data successfully (no weight change, mirroring agent.exe behavior).
+    /// Endpoint served data successfully (no weight change).
     Success,
     /// Endpoint returned an error; apply the error's failure weight.
     Failure(crate::error::InstallationError),
@@ -269,15 +268,18 @@ enum FetchOutcome {
     },
 }
 
-/// Fetch one artifact from CDN, trying loose blob then archive byte-range.
+/// Fetch one artifact from CDN.
+///
+/// When an archive location is known (from parsed CDN indices), fetches via
+/// archive byte-range request directly — no loose blob attempt. This avoids
+/// thousands of 404s against mirrors and CDN endpoints where individual blobs
+/// have long been pruned.
+///
+/// When no archive location is known (file not in any index), falls back to
+/// loose blob download by encoding key.
 ///
 /// Returns a `FetchOutcome` carrying the data (or error) plus scorer events
 /// to be applied by the result loop. No shared mutable state is accessed.
-///
-/// Fetch slot flow:
-/// - loose blob attempt (direct EKey fetch)
-/// - archive byte-range attempt (when an archive location is known)
-/// - score accumulation → carried in `score_events`
 async fn fetch_artifact<S: CdnSource>(
     cdn: Arc<S>,
     endpoints: Vec<CdnEndpoint>,
@@ -286,34 +288,11 @@ async fn fetch_artifact<S: CdnSource>(
 ) -> FetchOutcome {
     let mut score_events: Vec<(String, ScoreEvent)> = Vec::new();
     let mut serving_host: Option<String> = None;
-
-    // Try loose blob download from each endpoint (score-ordered list passed in)
     let mut data_result: Option<Vec<u8>> = None;
-    for ep in &endpoints {
-        match cdn.download(ep, ContentType::Data, &ekey_bytes).await {
-            Ok(data) => {
-                score_events.push((ep.host.clone(), ScoreEvent::Success));
-                serving_host = Some(ep.host.clone());
-                data_result = Some(data);
-                break;
-            }
-            Err(e) => {
-                debug!(host = %ep.host, error = %e, "loose blob failed, trying next endpoint");
-                score_events.push((ep.host.clone(), ScoreEvent::Failure(e)));
-            }
-        }
-    }
 
-    // If loose blob failed, try archive byte-range download
-    if data_result.is_none()
-        && let Some(loc) = archive_loc
-    {
-        debug!(
-            archive = %hex::encode(&loc.archive_key),
-            offset = loc.offset,
-            size = loc.size,
-            "falling back to archive range download"
-        );
+    if let Some(loc) = archive_loc {
+        // Archive location known — fetch via byte-range request directly.
+        // This is the common path for builds where CDN indices have been downloaded.
         for ep in &endpoints {
             match cdn
                 .download_range(
@@ -337,6 +316,23 @@ async fn fetch_artifact<S: CdnSource>(
                         error = %e,
                         "archive range download failed, trying next endpoint"
                     );
+                    score_events.push((ep.host.clone(), ScoreEvent::Failure(e)));
+                }
+            }
+        }
+    } else {
+        // No archive location — try loose blob download by encoding key.
+        // This path is used for files not found in any CDN archive index.
+        for ep in &endpoints {
+            match cdn.download(ep, ContentType::Data, &ekey_bytes).await {
+                Ok(data) => {
+                    score_events.push((ep.host.clone(), ScoreEvent::Success));
+                    serving_host = Some(ep.host.clone());
+                    data_result = Some(data);
+                    break;
+                }
+                Err(e) => {
+                    debug!(host = %ep.host, error = %e, "loose blob failed, trying next endpoint");
                     score_events.push((ep.host.clone(), ScoreEvent::Failure(e)));
                 }
             }
@@ -372,11 +368,15 @@ async fn fetch_artifact<S: CdnSource>(
 /// Execute downloads for a set of artifacts.
 ///
 /// Fans out up to `max_connections_global` concurrent CDN fetches, matching
-/// Agent.exe's `BatchDownloadUtils` slot-based fan-out. Result processing
+/// Slot-based fan-out download executor. Result processing
 /// (CASC write, loose file placement, scorer update, checkpoint) is sequential.
 ///
-/// The `on_file_written` callback is invoked after each file is written to
-/// CASC storage. Used for loose file placement during install.
+/// ## Artifact routing
+///
+/// - `artifact.is_loose_file = true`: raw BLTE bytes passed to `on_file_written(artifact,
+///   inst, Some(data))`. Callback decodes BLTE and writes to filesystem. No CASC write.
+/// - `artifact.is_loose_file = false`: data written to CASC via `write_raw_blte`, then
+///   `on_file_written(artifact, inst, None)` for any post-write hardlinking.
 #[allow(clippy::too_many_arguments)]
 pub async fn execute_downloads<S, F, Fut>(
     config: &InstallConfig,
@@ -391,7 +391,7 @@ pub async fn execute_downloads<S, F, Fut>(
 ) -> InstallationResult<DownloadReport>
 where
     S: CdnSource + 'static,
-    F: Fn(&ArtifactDescriptor, &Arc<Installation>) -> Fut,
+    F: Fn(&ArtifactDescriptor, &Arc<Installation>, Option<Vec<u8>>) -> Fut,
     Fut: std::future::Future<Output = ()>,
 {
     if endpoints.is_empty() {
@@ -438,8 +438,8 @@ where
     // stream because buffer_unordered yields results as they complete — the result
     // loop can update the scorer between result processing but the endpoint list
     // passed into each future is already cloned at submission time.
-    // This is equivalent to Agent.exe's behavior: slot endpoint selection happens
-    // at PrepareLooseFile time, before the batch starts, not mid-flight.
+    // Endpoint selection happens at submission time, before the batch starts,
+    // not mid-flight.
     let sorted_eps: Vec<CdnEndpoint> = scorer
         .sort_endpoints(endpoints)?
         .into_iter()
@@ -490,26 +490,45 @@ where
                     }
                 }
 
-                // Write pre-encoded BLTE data to local CASC storage
-                match installation.write_raw_blte(data).await {
-                    Ok(_encoding_key) => {
-                        debug!(path = %artifact.path, "file written to CASC storage");
+                // Route based on artifact type:
+                // - Loose files (install manifest): write directly to filesystem, skip CASC.
+                // - CASC files (download manifest): write to archive storage.
+                let write_result: Result<(), crate::error::InstallationError> =
+                    if artifact.is_loose_file {
+                        // Pass raw BLTE bytes to callback for direct filesystem write.
+                        // The LooseFileHandler decodes BLTE and writes to the destination path.
+                        on_file_written(&artifact, &installation, Some(data)).await;
+                        Ok(())
+                    } else {
+                        installation
+                            .write_raw_blte(data)
+                            .await
+                            .map(|_| ())
+                            .map_err(crate::error::InstallationError::from)
+                    };
+
+                match write_result {
+                    Ok(()) => {
+                        if artifact.is_loose_file {
+                            debug!(path = %artifact.path, "loose file written to filesystem");
+                        } else {
+                            debug!(path = %artifact.path, "file written to CASC storage");
+                            on_file_written(&artifact, &installation, None).await;
+                        }
                         downloaded += 1;
                         bytes_downloaded += u64::from(artifact.file_size);
                         checkpoint.mark_completed(ekey_hex);
                         since_checkpoint += 1;
 
-                        on_file_written(&artifact, &installation).await;
-
                         progress(ProgressEvent::FileComplete {
                             path: artifact.path.clone(),
+                            bytes: u64::from(artifact.file_size),
                         });
                     }
                     Err(e) => {
                         warn!(path = %artifact.path, error = %e, "failed to write file");
                         let error_msg = e.to_string();
-                        let inst_err = crate::error::InstallationError::from(e);
-                        let category = categorize_error(&inst_err);
+                        let category = categorize_error(&e);
                         // Hash mismatch after download: penalize the serving endpoint
                         if category == FailureCategory::HashMismatch
                             && let Some(ref host) = serving_host
@@ -571,6 +590,399 @@ where
         skipped = skipped,
         bytes = bytes_downloaded,
         "download phase complete"
+    );
+
+    Ok(DownloadReport {
+        downloaded,
+        failed,
+        skipped,
+        bytes_downloaded,
+        failed_files,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Archive-batched download: groups files by archive, coalesces adjacent ranges,
+// and fetches large contiguous regions instead of individual per-file requests.
+// Reduces hundreds of thousands of HTTP requests to hundreds.
+// ---------------------------------------------------------------------------
+
+/// Entry within an archive group, sorted by offset for coalescing.
+#[derive(Debug, Clone)]
+struct ArchiveEntry {
+    artifact_idx: usize,
+    offset: u64,
+    size: u32,
+}
+
+/// A contiguous range within an archive covering one or more entries.
+#[derive(Debug)]
+struct CoalescedRange {
+    offset: u64,
+    total_size: u64,
+    /// Indices into the parent ArchiveGroup.entries vec.
+    entry_indices: Vec<usize>,
+}
+
+/// Group of files residing in the same CDN archive.
+struct ArchiveGroup {
+    archive_key: Vec<u8>,
+    entries: Vec<ArchiveEntry>,
+}
+
+/// Merge adjacent entries within an archive into fewer HTTP range requests.
+/// Entries must be sorted by offset. Gaps <= `gap_threshold` bytes are absorbed
+/// into the range (cheaper than a new HTTP round-trip).
+fn coalesce_ranges(entries: &[ArchiveEntry], gap_threshold: u64) -> Vec<CoalescedRange> {
+    if entries.is_empty() {
+        return Vec::new();
+    }
+
+    let mut ranges = Vec::new();
+    let mut current = CoalescedRange {
+        offset: entries[0].offset,
+        total_size: u64::from(entries[0].size),
+        entry_indices: vec![0],
+    };
+
+    for (i, entry) in entries.iter().enumerate().skip(1) {
+        let current_end = current.offset + current.total_size;
+        let next_start = entry.offset;
+
+        if next_start <= current_end + gap_threshold {
+            // Merge: extend current range to cover this entry
+            let new_end = next_start + u64::from(entry.size);
+            current.total_size = new_end - current.offset;
+            current.entry_indices.push(i);
+        } else {
+            // Gap too large — finalize current, start new range
+            ranges.push(current);
+            current = CoalescedRange {
+                offset: entry.offset,
+                total_size: u64::from(entry.size),
+                entry_indices: vec![i],
+            };
+        }
+    }
+    ranges.push(current);
+    ranges
+}
+
+/// Execute downloads using archive-batched range requests.
+///
+/// Groups artifacts by their containing CDN archive (via `archive_lookup`),
+/// sorts entries by offset within each archive, coalesces adjacent entries
+/// into larger byte ranges, and fetches each range with a single HTTP request.
+/// This reduces ~131K individual requests to ~600 archive-level requests.
+///
+/// Falls back to individual per-file fetch for entries not found in the
+/// archive lookup (e.g., loose blobs).
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_batched_downloads<S, F, Fut>(
+    config: &InstallConfig,
+    cdn: Arc<S>,
+    installation: Arc<Installation>,
+    endpoints: &[CdnEndpoint],
+    artifacts: &[ArtifactDescriptor],
+    archive_lookup: &ArchiveLookup,
+    checkpoint: &mut Checkpoint,
+    progress: &(impl Fn(ProgressEvent) + Send + Sync),
+    on_file_written: F,
+) -> InstallationResult<DownloadReport>
+where
+    S: CdnSource + 'static,
+    F: Fn(&ArtifactDescriptor, &Arc<Installation>, Option<Vec<u8>>) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    if endpoints.is_empty() {
+        return Err(crate::error::InstallationError::InvalidConfig(
+            "no CDN endpoints".to_string(),
+        ));
+    }
+
+    let mut downloaded: usize = 0;
+    let mut failed: usize = 0;
+    let mut skipped: usize = 0;
+    let mut bytes_downloaded: u64 = 0;
+    let mut failed_files: Vec<FailedFile> = Vec::new();
+
+    // Partition into skipped (checkpointed), archive-grouped, and loose (no archive loc).
+    let mut archive_groups: HashMap<Vec<u8>, ArchiveGroup> = HashMap::new();
+    let mut loose_artifacts: Vec<ArtifactDescriptor> = Vec::new();
+    let mut pending_artifacts: Vec<ArtifactDescriptor> = Vec::new(); // ordered for index correlation
+
+    for artifact in artifacts {
+        let ekey_hex = hex::encode(artifact.encoding_key.as_bytes());
+        if checkpoint.is_completed(&ekey_hex) {
+            skipped += 1;
+            continue;
+        }
+
+        let ekey_bytes = artifact.encoding_key.as_bytes();
+        if let Some(loc) = lookup_archive(archive_lookup, ekey_bytes) {
+            let artifact_idx = pending_artifacts.len();
+            pending_artifacts.push(artifact.clone());
+
+            let group = archive_groups
+                .entry(loc.archive_key.clone())
+                .or_insert_with(|| ArchiveGroup {
+                    archive_key: loc.archive_key.clone(),
+                    entries: Vec::new(),
+                });
+            group.entries.push(ArchiveEntry {
+                artifact_idx,
+                offset: loc.offset,
+                size: loc.size,
+            });
+        } else if artifact.is_loose_file {
+            loose_artifacts.push(artifact.clone());
+            pending_artifacts.push(artifact.clone());
+        } else {
+            // No archive location and not loose — fall back to individual fetch
+            loose_artifacts.push(artifact.clone());
+            pending_artifacts.push(artifact.clone());
+        }
+    }
+
+    // Sort entries within each archive by offset (enables coalescing)
+    for group in archive_groups.values_mut() {
+        group.entries.sort_by_key(|e| e.offset);
+    }
+
+    // Collect groups sorted by total size descending (big archives first)
+    let mut groups: Vec<ArchiveGroup> = archive_groups.into_values().collect();
+    groups.sort_by(|a, b| {
+        let size_a: u64 = a.entries.iter().map(|e| u64::from(e.size)).sum();
+        let size_b: u64 = b.entries.iter().map(|e| u64::from(e.size)).sum();
+        size_b.cmp(&size_a)
+    });
+
+    let total_ranges: usize = groups
+        .iter()
+        .map(|g| coalesce_ranges(&g.entries, 64).len())
+        .sum();
+
+    info!(
+        archives = groups.len(),
+        coalesced_ranges = total_ranges,
+        loose = loose_artifacts.len(),
+        skipped = skipped,
+        total = artifacts.len(),
+        "batched download: grouped by archive"
+    );
+
+    // Phase 1: Download archive-batched entries
+    let gap_threshold = 64u64;
+    let mut scorer = EndpointScorer::new();
+    let sorted_eps: Vec<CdnEndpoint> = scorer
+        .sort_endpoints(endpoints)?
+        .into_iter()
+        .cloned()
+        .collect();
+
+    for group in &groups {
+        let ranges = coalesce_ranges(&group.entries, gap_threshold);
+
+        for range in &ranges {
+            // Fetch the coalesced range from CDN
+            let mut range_data: Option<Vec<u8>> = None;
+            let mut serving_host: Option<String> = None;
+
+            for ep in &sorted_eps {
+                match cdn
+                    .download_range(
+                        ep,
+                        ContentType::Data,
+                        &group.archive_key,
+                        range.offset,
+                        range.total_size,
+                    )
+                    .await
+                {
+                    Ok(data) => {
+                        scorer.record_success(&ep.host);
+                        serving_host = Some(ep.host.clone());
+                        range_data = Some(data);
+                        break;
+                    }
+                    Err(e) => {
+                        let err: crate::error::InstallationError = e;
+                        scorer.record_failure(&ep.host, &err);
+                    }
+                }
+            }
+
+            let Some(data) = range_data else {
+                // All endpoints failed for this range
+                for &entry_idx in &range.entry_indices {
+                    let artifact = &pending_artifacts[group.entries[entry_idx].artifact_idx];
+                    failed += 1;
+                    failed_files.push(FailedFile {
+                        install_path: artifact.path.clone(),
+                        encoding_key: hex::encode(artifact.encoding_key.as_bytes()),
+                        category: FailureCategory::Network,
+                        endpoint_host: None,
+                    });
+                }
+                continue;
+            };
+
+            // Split coalesced response into individual entries and write each
+            for &entry_idx in &range.entry_indices {
+                let entry = &group.entries[entry_idx];
+                let artifact = &pending_artifacts[entry.artifact_idx];
+                let local_offset = (entry.offset - range.offset) as usize;
+                let entry_size = entry.size as usize;
+
+                if local_offset + entry_size > data.len() {
+                    warn!(
+                        path = %artifact.path,
+                        "entry extends past range data (offset={}, size={}, range_len={})",
+                        local_offset, entry_size, data.len()
+                    );
+                    failed += 1;
+                    failed_files.push(FailedFile {
+                        install_path: artifact.path.clone(),
+                        encoding_key: hex::encode(artifact.encoding_key.as_bytes()),
+                        category: FailureCategory::HashMismatch,
+                        endpoint_host: serving_host.clone(),
+                    });
+                    continue;
+                }
+
+                let entry_data = data[local_offset..local_offset + entry_size].to_vec();
+
+                // Write to CASC or loose file
+                let ekey_hex = hex::encode(artifact.encoding_key.as_bytes());
+                let write_result: Result<(), crate::error::InstallationError> =
+                    if artifact.is_loose_file {
+                        on_file_written(artifact, &installation, Some(entry_data)).await;
+                        Ok(())
+                    } else {
+                        installation
+                            .write_raw_blte(entry_data)
+                            .await
+                            .map(|_| ())
+                            .map_err(crate::error::InstallationError::from)
+                    };
+
+                match write_result {
+                    Ok(()) => {
+                        downloaded += 1;
+                        bytes_downloaded += u64::from(entry.size);
+                        checkpoint.mark_completed(ekey_hex);
+
+                        progress(ProgressEvent::FileComplete {
+                            path: artifact.path.clone(),
+                            bytes: u64::from(entry.size),
+                        });
+                    }
+                    Err(e) => {
+                        warn!(path = %artifact.path, error = %e, "failed to write file");
+                        failed += 1;
+                        failed_files.push(FailedFile {
+                            install_path: artifact.path.clone(),
+                            encoding_key: ekey_hex,
+                            category: FailureCategory::Storage,
+                            endpoint_host: serving_host.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Checkpoint after each archive
+        checkpoint.write(&config.install_path).await?;
+        progress(ProgressEvent::CheckpointSaved {
+            completed: checkpoint.completed_count(),
+            remaining: checkpoint.remaining_count(),
+        });
+    }
+
+    // Phase 2: Download loose/unmapped artifacts individually (same as before)
+    if !loose_artifacts.is_empty() {
+        info!(loose = loose_artifacts.len(), "downloading loose artifacts");
+
+        for artifact in &loose_artifacts {
+            let ekey_hex = hex::encode(artifact.encoding_key.as_bytes());
+            if checkpoint.is_completed(&ekey_hex) {
+                continue;
+            }
+
+            let ekey_bytes = artifact.encoding_key.as_bytes().to_vec();
+            let outcome =
+                fetch_artifact(Arc::clone(&cdn), sorted_eps.clone(), ekey_bytes, None).await;
+
+            match outcome {
+                FetchOutcome::Downloaded {
+                    data,
+                    score_events,
+                    serving_host,
+                } => {
+                    for (host, event) in score_events {
+                        match event {
+                            ScoreEvent::Success => scorer.record_success(&host),
+                            ScoreEvent::Failure(e) => scorer.record_failure(&host, &e),
+                        }
+                    }
+
+                    let write_result: Result<(), crate::error::InstallationError> =
+                        if artifact.is_loose_file {
+                            on_file_written(artifact, &installation, Some(data)).await;
+                            Ok(())
+                        } else {
+                            installation
+                                .write_raw_blte(data)
+                                .await
+                                .map(|_| ())
+                                .map_err(crate::error::InstallationError::from)
+                        };
+
+                    match write_result {
+                        Ok(()) => {
+                            downloaded += 1;
+                            bytes_downloaded += u64::from(artifact.file_size);
+                            checkpoint.mark_completed(ekey_hex);
+                            progress(ProgressEvent::FileComplete {
+                                path: artifact.path.clone(),
+                                bytes: u64::from(artifact.file_size),
+                            });
+                        }
+                        Err(e) => {
+                            warn!(path = %artifact.path, error = %e, "failed to write loose file");
+                            failed += 1;
+                            failed_files.push(FailedFile {
+                                install_path: artifact.path.clone(),
+                                encoding_key: ekey_hex,
+                                category: FailureCategory::Storage,
+                                endpoint_host: serving_host,
+                            });
+                        }
+                    }
+                }
+                FetchOutcome::Failed {
+                    error_msg,
+                    category,
+                } => {
+                    warn!(path = %artifact.path, error = %error_msg, "failed to download loose file");
+                    failed += 1;
+                    failed_files.push(FailedFile {
+                        install_path: artifact.path.clone(),
+                        encoding_key: ekey_hex,
+                        category,
+                        endpoint_host: None,
+                    });
+                }
+            }
+        }
+    }
+
+    info!(
+        downloaded,
+        failed,
+        skipped,
+        bytes = bytes_downloaded,
+        "batched download phase complete"
     );
 
     Ok(DownloadReport {
@@ -659,8 +1071,7 @@ pub async fn download_archive_indices<S: CdnSource + 'static>(
         for result in results {
             match result {
                 Ok((key, data)) => {
-                    // Validate index before writing to disk (matches agent.exe behavior:
-                    // CdnIndexFooterValidator + CdnIndexBlockValidator run before accepting data)
+                    // Validate index before writing to disk
                     let cursor = std::io::Cursor::new(&data);
                     if let Err(e) = ArchiveIndex::parse(cursor) {
                         warn!(key = %key, error = %e, "downloaded archive index failed validation, skipping");
@@ -679,6 +1090,180 @@ pub async fn download_archive_indices<S: CdnSource + 'static>(
     }
 
     Ok(downloaded)
+}
+
+/// Download patch archive index files to the indices directory.
+///
+/// Same as `download_archive_indices` but uses the `/patch/` CDN path
+/// for patch archive content.
+pub async fn download_patch_archive_indices<S: CdnSource + 'static>(
+    cdn: &Arc<S>,
+    endpoints: &[CdnEndpoint],
+    patch_keys: &[String],
+    indices_dir: &Path,
+    batch_size: usize,
+    progress: &(impl Fn(ProgressEvent) + Send + Sync),
+) -> InstallationResult<usize> {
+    if endpoints.is_empty() {
+        return Err(crate::error::InstallationError::InvalidConfig(
+            "no CDN endpoints".to_string(),
+        ));
+    }
+
+    let mut downloaded: usize = 0;
+    let total = patch_keys.len();
+
+    let mut to_download: Vec<(usize, String)> = Vec::new();
+    for (i, key) in patch_keys.iter().enumerate() {
+        let index_path = indices_dir.join(format!("{key}.index"));
+        if index_path.exists() {
+            debug!(key = %key, "patch archive index already exists, skipping");
+            continue;
+        }
+        to_download.push((i, key.clone()));
+    }
+
+    info!(
+        total = total,
+        to_download = to_download.len(),
+        "downloading patch archive indices"
+    );
+
+    for batch_start in (0..to_download.len()).step_by(batch_size) {
+        let batch_end = (batch_start + batch_size).min(to_download.len());
+        let endpoints_owned: Vec<CdnEndpoint> = endpoints.to_vec();
+        let futures: Vec<_> = (batch_start..batch_end)
+            .map(|i| {
+                let (idx, ref key) = to_download[i];
+                progress(ProgressEvent::ArchiveIndexDownloading { index: idx, total });
+                let key = key.clone();
+                let endpoints = endpoints_owned.clone();
+                let cdn = Arc::clone(cdn);
+                async move {
+                    let mut last_err = None;
+                    for ep in &endpoints {
+                        match cdn.download_patch_archive_index(ep, &key).await {
+                            Ok(data) => return Ok((key, data)),
+                            Err(e) => {
+                                last_err = Some(e);
+                            }
+                        }
+                    }
+                    Err(last_err.unwrap_or_else(|| {
+                        crate::error::InstallationError::Cdn("no endpoints available".to_string())
+                    }))
+                }
+            })
+            .collect();
+
+        let results: Vec<InstallationResult<(String, Vec<u8>)>> = stream::iter(futures)
+            .buffer_unordered(batch_size)
+            .collect()
+            .await;
+
+        for result in results {
+            match result {
+                Ok((key, data)) => {
+                    let index_path = indices_dir.join(format!("{key}.index"));
+                    tokio::fs::write(&index_path, &data).await?;
+                    downloaded += 1;
+                    progress(ProgressEvent::ArchiveIndexComplete { archive_key: key });
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to download patch archive index");
+                }
+            }
+        }
+    }
+
+    Ok(downloaded)
+}
+
+/// Generate an archive-group index from individual archive indices.
+///
+/// Parses each `{key}.index` file from `indices_dir`, merges them into
+/// a single combined index using `archive_group::build_merged`, and
+/// writes the result as `{group_hash}.index`.
+///
+/// `is_patch` controls logging labels only.
+pub fn generate_group_index(
+    indices_dir: &Path,
+    archive_keys: &[String],
+    group_hash: &str,
+    is_patch: bool,
+) -> InstallationResult<()> {
+    use cascette_formats::archive::build_merged;
+
+    let group_path = indices_dir.join(format!("{group_hash}.index"));
+    if group_path.exists() {
+        debug!(
+            hash = %group_hash,
+            "archive group index already exists, skipping generation"
+        );
+        return Ok(());
+    }
+
+    let label = if is_patch { "patch" } else { "data" };
+
+    // Parse all individual indices
+    let mut parsed: Vec<(u16, ArchiveIndex)> = Vec::with_capacity(archive_keys.len());
+    for (i, key) in archive_keys.iter().enumerate() {
+        let index_path = indices_dir.join(format!("{key}.index"));
+        if !index_path.exists() {
+            debug!(key = %key, "individual index missing, skipping for group");
+            continue;
+        }
+
+        let file = std::fs::File::open(&index_path).map_err(|e| {
+            crate::error::InstallationError::Format(format!(
+                "failed to open index {key} for group merge: {e}"
+            ))
+        })?;
+        let mut reader = std::io::BufReader::new(file);
+
+        match ArchiveIndex::parse(&mut reader) {
+            Ok(index) => {
+                parsed.push((i as u16, index));
+            }
+            Err(e) => {
+                warn!(key = %key, error = %e, "failed to parse index for group merge");
+            }
+        }
+    }
+
+    if parsed.is_empty() {
+        warn!(label, "no indices parsed, skipping group generation");
+        return Ok(());
+    }
+
+    // Build references for build_merged
+    let refs: Vec<(u16, &ArchiveIndex)> = parsed.iter().map(|(idx, index)| (*idx, index)).collect();
+
+    // Generate the merged group index
+    let mut output = Vec::new();
+    let cursor = std::io::Cursor::new(&mut output);
+    build_merged(&refs, cursor).map_err(|e| {
+        crate::error::InstallationError::Format(format!(
+            "failed to build {label} archive group: {e}"
+        ))
+    })?;
+
+    // Write to disk
+    std::fs::write(&group_path, &output).map_err(|e| {
+        crate::error::InstallationError::Format(format!(
+            "failed to write {label} archive group index: {e}"
+        ))
+    })?;
+
+    info!(
+        label,
+        hash = %group_hash,
+        archives = parsed.len(),
+        size = output.len(),
+        "generated archive group index"
+    );
+
+    Ok(())
 }
 
 /// Collect locally known encoding keys from an existing checkpoint.

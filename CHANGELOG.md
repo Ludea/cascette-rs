@@ -10,6 +10,80 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- cascette-installation: `geolocation` module — derives ISO 3166-1 country codes
+  and Blizzard CDN region from the OS timezone via `iana-time-zone` and `isocountry`
+  crates. Populates `acct-{alpha3}` and `geoip-{alpha2}` tags in `.build.info`
+  without network-based GeoIP lookups
+- cascette-installation: `TagQuery::apply_geo_defaults()` fills missing
+  `account_country` and `geo_ip_country` from timezone detection. Launcher
+  overrides take precedence when present
+- cascette-agent: install and update pipelines call `apply_geo_defaults()` so
+  `.build.info` Tags column includes country segments by default
+- cascette-agent: concurrent launcher binary installation during install and
+  backfill operations. Resolves `bts` (bootstrapper) product metadata and
+  spawns a separate install pipeline for the launcher, sharing the CASC
+  container with the game content install
+- cascette-protocol: `product_config` module — fetches and parses per-product
+  JSON configuration from CDN. Extracts `launcher_install_info` for bootstrapper
+  resolution and provides `fallback_product_tag()` for older builds without
+  a `ProductConfig` column
+- cascette-protocol: `CdnClient::http_client()` accessor for operations outside
+  the standard CDN content type URL scheme
+- cascette-agent: `resolve_bootstrapper_metadata()` in executor helpers — queries
+  `bts/versions` by product tag and `bts/cdns` by geographic region
+- cascette-agent: `build_launcher_install_config()` — constructs `InstallConfig`
+  for the launcher with `game_subfolder: None` and `"launcher"` extra tag
+- cascette-installation: `TagQuery::extra_tags` field for additional manifest
+  filter tags beyond platform, architecture, and locale
+- cascette-agent: schema v7 migration adds `product_config_hash` column to
+  products table
+- cascette-installation: `TagQuery` struct for structured tag filtering — replaces
+  flat `platform_tags: Vec<String>` + `locale: String` with typed fields for
+  platform, architecture, locale, region, speech, and text. `tag_names()` returns
+  manifest filter tags; `build_info_tags()` generates the `.build.info` Tags column
+  format with `?` group delimiters and `:` config separators matching Blizzard Agent
+- cascette-installation: `tag_matched` field on `ArtifactSet` tracks how many
+  entries matched the tag query before dedup against local keys
+- cascette-installation: `ProgressEvent` variants — `ManifestDownloading`,
+  `ManifestComplete`, `LooseFilePhaseStarted`, `LooseFilePhaseComplete`,
+  `LayoutWritten` for per-phase progress tracking
+- cascette-agent: CDN override environment variables (`CASCETTE_AGENT_CDN_HOSTS`,
+  `CASCETTE_AGENT_CDN_PATH`) logged at startup and at metadata resolution time
+- cascette-crypto: `salsa20_vector` example — emits a Salsa20 test vector from
+  cascette-rs for cross-verification with the C++ `Salsa20Cipher`
+- cascette-formats: BLTE cross-verification examples for interop with C++ CascLib —
+  `gen_lz4_cross` and `decode_lz4_cross` (LZ4 via lz4_flex both directions),
+  `gen_encrypted_blte` and `decode_enc` (encrypted 'E' blocks), and `encrypt_vector`
+  (raw Salsa20-encrypted chunk emission)
+
+### Changed
+
+- tools: `generate_wow_paths.sh` and `verify_mirror_sizes.sh` include the new build
+  wow_classic_titan 3.80.2.68943 (1061 builds total); stale per-product build-count
+  comments removed from `verify_mirror_sizes.sh`
+
+- cascette-installation: `InstallConfig`, `UpdateConfig`, and `ExtractConfig` use
+  `tag_query: TagQuery` instead of `platform_tags` and `locale` fields
+- cascette-installation: `.build.info` Tags column now generates multi-config format
+  (e.g. `Windows x86_64 US? enUS speech?:Windows x86_64 US? enUS text?`)
+- cascette-installation: `.product.db` `LanguageOption` derived from `tag_query`
+  speech/text flags instead of hardcoded value
+- cascette-installation: loose (install manifest) files download before CASC
+  (download manifest) blobs, matching Blizzard Agent phase ordering
+- cascette-installation: classification logging shows tag list, tag match counts,
+  and `.build.info` tags format
+
+### Fixed
+
+- cascette-installation: tag filtering now includes locale and content-type tags
+  (`enUS`, `speech`, `text`), preventing oversized downloads that ignored locale
+- cascette-installation: `bytes` field on `ProgressEvent::FileComplete` set
+  correctly from download result instead of on `FileDownloading`
+- cascette-agent: `build_install_config` and `build_update_config` construct
+  `TagQuery` with locale and region instead of appending locale to platform tags
+
+### Added
+
 - cascette-protocol: `build_file_tree` example — walks a CASC build's file tree
   from a build config hash and CDN config hash. Supports local mirror mode
   (`/path/to/mirror tpr/wow`) and online CDN mode (`https://host tpr/wow`).
@@ -699,7 +773,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Memory pooling optimized for NGDP file size classes
   - CDN integration with retry logic and range requests
 - cascette-formats crate: Binary format parsers and builders for NGDP/CASC
-  - BLTE: Block Table Encoded format with compression (ZLib, LZ4) and encryption
+  - BLTE: Block Table Encoding format with compression (ZLib, LZ4) and encryption
   - BPSV: Blizzard Pipe-Separated Values for version and config data
   - Archive: Archive index and data file operations for CDN content storage
   - Encoding: Content key to encoding key mappings

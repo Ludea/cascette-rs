@@ -21,8 +21,8 @@ pub struct EncodingHeader {
 
     /// Content key page size in KB (big-endian u16)
     ///
-    /// Agent.exe reads this as two bytes: `(hi << 8 | lo) << 0xa`, which is
-    /// equivalent to `value_u16 * 1024`. The raw value (typically 4) represents
+    /// Stored as two bytes: `(hi << 8 | lo) << 0xa`, which is equivalent to
+    /// `value_u16 * 1024`. The raw value (typically 4) represents
     /// kilobytes; use [`ckey_page_size()`](Self::ckey_page_size) to get the
     /// byte size (typically 4096).
     pub ckey_page_size_kb: u16,

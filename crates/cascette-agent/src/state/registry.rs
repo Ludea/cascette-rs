@@ -6,13 +6,12 @@ use chrono::Utc;
 use tracing::debug;
 
 use crate::error::{AgentError, AgentResult};
-use crate::handlers::ProductDownloadConfig;
 use crate::models::product::{Product, ProductStatus};
+use crate::server::router::ProductDownloadConfig;
 
 use super::db::Database;
 
 /// Product registry backed by SQLite.
-#[derive(Debug, Clone)]
 pub struct ProductRegistry {
     db: Database,
 }
@@ -38,7 +37,11 @@ impl ProductRegistry {
                         size_bytes, region, locale, installation_mode,
                         is_update_available, available_version,
                         patch_url, protocol, build_config, cdn_config,
-                        subfolder, patch_region_hint, created_at, updated_at
+                        subfolder, patch_region_hint,
+                        account_country, geo_ip_country,
+                        product_config_hash,
+                        platform, architecture,
+                        created_at, updated_at
                  FROM products ORDER BY product_code",
                 (),
             )
@@ -69,7 +72,11 @@ impl ProductRegistry {
                         size_bytes, region, locale, installation_mode,
                         is_update_available, available_version,
                         patch_url, protocol, build_config, cdn_config,
-                        subfolder, patch_region_hint, created_at, updated_at
+                        subfolder, patch_region_hint,
+                        account_country, geo_ip_country,
+                        product_config_hash,
+                        platform, architecture,
+                        created_at, updated_at
                  FROM products WHERE product_code = ?1",
                 turso::params![normalized.clone()],
             )
@@ -84,7 +91,7 @@ impl ProductRegistry {
     /// Insert a new product.
     ///
     /// The product code is normalized to ASCII lowercase before storage,
-    /// matching Agent.exe's case-insensitive UID handling.
+    /// matching the Blizzard Agent's case-insensitive UID handling.
     ///
     /// # Errors
     ///
@@ -100,8 +107,11 @@ impl ProductRegistry {
                                        is_update_available, available_version,
                                        patch_url, protocol, build_config, cdn_config,
                                        subfolder, patch_region_hint,
+                                       account_country, geo_ip_country,
+                                       product_config_hash,
+                                       platform, architecture,
                                        created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
                 turso::params![
                     normalized_code,
                     product.name.clone(),
@@ -120,6 +130,11 @@ impl ProductRegistry {
                     product.cdn_config.clone(),
                     product.subfolder.clone(),
                     product.patch_region_hint.clone(),
+                    product.account_country.clone(),
+                    product.geo_ip_country.clone(),
+                    product.product_config_hash.clone(),
+                    product.platform.clone(),
+                    product.architecture.clone(),
                     now.clone(),
                     now
                 ],
@@ -150,8 +165,11 @@ impl ProductRegistry {
                     patch_url = ?11, protocol = ?12,
                     build_config = ?13, cdn_config = ?14,
                     subfolder = ?15, patch_region_hint = ?16,
-                    updated_at = ?17
-                 WHERE product_code = ?18",
+                    account_country = ?17, geo_ip_country = ?18,
+                    product_config_hash = ?19,
+                    platform = ?20, architecture = ?21,
+                    updated_at = ?22
+                 WHERE product_code = ?23",
                 turso::params![
                     product.name.clone(),
                     product.status.to_string(),
@@ -169,6 +187,11 @@ impl ProductRegistry {
                     product.cdn_config.clone(),
                     product.subfolder.clone(),
                     product.patch_region_hint.clone(),
+                    product.account_country.clone(),
+                    product.geo_ip_country.clone(),
+                    product.product_config_hash.clone(),
+                    product.platform.clone(),
+                    product.architecture.clone(),
                     now,
                     normalized_code
                 ],
@@ -181,8 +204,7 @@ impl ProductRegistry {
 
     /// Check if a product exists.
     ///
-    /// Uses ASCII-lowercase normalization to match Agent.exe's
-    /// case-insensitive UID comparison.
+    /// Uses ASCII-lowercase normalization for case-insensitive UID comparison.
     ///
     /// # Errors
     ///
@@ -235,7 +257,11 @@ impl ProductRegistry {
                         size_bytes, region, locale, installation_mode,
                         is_update_available, available_version,
                         patch_url, protocol, build_config, cdn_config,
-                        subfolder, patch_region_hint, created_at, updated_at
+                        subfolder, patch_region_hint,
+                        account_country, geo_ip_country,
+                        product_config_hash,
+                        platform, architecture,
+                        created_at, updated_at
                  FROM products WHERE install_path = ?1",
                 turso::params![install_path],
             )
@@ -386,8 +412,13 @@ fn row_to_product(row: &turso::Row) -> AgentResult<Product> {
     let cdn_config: Option<String> = row.get(14)?;
     let subfolder: Option<String> = row.get(15)?;
     let patch_region_hint: Option<String> = row.get(16)?;
-    let created_at_str: String = row.get(17)?;
-    let updated_at_str: String = row.get(18)?;
+    let account_country: Option<String> = row.get(17)?;
+    let geo_ip_country: Option<String> = row.get(18)?;
+    let product_config_hash: Option<String> = row.get(19)?;
+    let platform: Option<String> = row.get(20)?;
+    let architecture: Option<String> = row.get(21)?;
+    let created_at_str: String = row.get(22)?;
+    let updated_at_str: String = row.get(23)?;
 
     let status = parse_product_status(&status_str)?;
     let installation_mode = installation_mode_str
@@ -417,6 +448,11 @@ fn row_to_product(row: &turso::Row) -> AgentResult<Product> {
         cdn_config,
         subfolder,
         patch_region_hint,
+        account_country,
+        geo_ip_country,
+        product_config_hash,
+        platform,
+        architecture,
         created_at,
         updated_at,
     })

@@ -1,7 +1,7 @@
 //! Configuration and CLI argument parsing for the agent service.
 //!
-//! CLI flags match the real Blizzard Agent.exe (version 3.13.3) where applicable,
-//! with additional cascette-specific options.
+//! CLI flags match the Blizzard Agent where applicable, with additional
+//! cascette-specific options.
 //!
 //! # Example
 //!
@@ -29,7 +29,7 @@ pub const DEFAULT_DB_NAME: &str = "agent.db";
 #[derive(Debug, Clone, Parser)]
 #[command(
     name = "cascette-agent",
-    about = "Local HTTP agent service compatible with Blizzard Agent.exe",
+    about = "Local HTTP agent service compatible with the Blizzard Agent",
     version
 )]
 pub struct AgentConfig {
@@ -197,14 +197,30 @@ impl AgentConfig {
             .split(',')
             .map(str::trim)
             .filter(|h| !h.is_empty())
-            .map(|host| cascette_protocol::CdnEndpoint {
-                host: host.to_string(),
-                path: cdn_path.clone(),
-                product_path: None,
-                scheme: None,
-                is_fallback: false,
-                strict: false,
-                max_hosts: None,
+            .map(|host| {
+                // Strip an explicit scheme prefix if provided (e.g. "http://localhost:8000").
+                // Keep the scheme so callers can serve plain HTTP mirrors locally.
+                let (scheme, bare_host) = if let Some(rest) = host.strip_prefix("https://") {
+                    (Some("https".to_string()), rest.to_string())
+                } else if let Some(rest) = host.strip_prefix("http://") {
+                    (Some("http".to_string()), rest.to_string())
+                } else {
+                    // No explicit scheme: use http for loopback addresses, https elsewhere.
+                    let is_local = host.starts_with("localhost")
+                        || host.starts_with("127.")
+                        || host.starts_with("[::1]");
+                    let inferred = if is_local { "http" } else { "https" };
+                    (Some(inferred.to_string()), host.to_string())
+                };
+                cascette_protocol::CdnEndpoint {
+                    host: bare_host,
+                    path: cdn_path.clone(),
+                    product_path: None,
+                    scheme,
+                    is_fallback: false,
+                    strict: false,
+                    max_hosts: None,
+                }
             })
             .collect::<Vec<_>>();
 

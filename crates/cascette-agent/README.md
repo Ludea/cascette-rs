@@ -1,6 +1,6 @@
 # cascette-agent
 
-Local HTTP agent service compatible with Blizzard Agent.exe (version 3.13.3).
+Local HTTP agent service compatible with the Blizzard Agent protocol.
 
 Provides a REST API on port 1120 for managing game product installations,
 updates, repairs, and verification.
@@ -45,7 +45,7 @@ cascette-agent --loglevel=debug
 ## Configuration
 
 All configuration is passed via environment variables or CLI flags. The flags
-mirror the Blizzard Agent.exe command-line interface.
+mirror the Blizzard Agent command-line interface.
 
 ### CLI Flags
 

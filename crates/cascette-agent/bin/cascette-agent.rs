@@ -18,14 +18,9 @@ use tracing::info;
 use cascette_agent::config::AgentConfig;
 use cascette_agent::executor::OperationRunner;
 use cascette_agent::observability;
+use cascette_agent::server::router::{AppState, create_router};
 use cascette_agent::state::db::Database;
 use cascette_import::ImportProvider;
-
-use crate::router::create_router;
-use cascette_agent::handlers::AppState;
-
-mod router;
-mod routes;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -39,6 +34,13 @@ async fn main() -> Result<()> {
         version = env!("CARGO_PKG_VERSION"),
         "cascette-agent starting"
     );
+
+    if let Some(ref hosts) = config.cdn_hosts {
+        info!(cdn_hosts = %hosts, "CDN host override active (CASCETTE_AGENT_CDN_HOSTS)");
+    }
+    if let Some(ref path) = config.cdn_path_override {
+        info!(cdn_path = %path, "CDN path override active (CASCETTE_AGENT_CDN_PATH)");
+    }
 
     // Construct protocol clients.
     // ClientConfig supports env-var overrides (CASCETTE_TACT_HTTPS_URL, etc.)

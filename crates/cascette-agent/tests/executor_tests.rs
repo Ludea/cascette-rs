@@ -171,6 +171,7 @@ async fn test_progress_bridge_event_mapping() {
     // Send FileComplete event
     callback(ProgressEvent::FileComplete {
         path: "data/00/00/00.data".to_string(),
+        bytes: 1024,
     });
 
     // Give the flush task a moment to run, then abort it
@@ -200,13 +201,22 @@ async fn test_build_install_config() {
         Some("aabb".to_string()),
         Some("ccdd".to_string()),
         None,
+        None,
+        None,
+        None,
+        None,
     );
 
     assert_eq!(config.product, "wow");
     assert_eq!(config.install_path.to_str().unwrap(), "/opt/games/wow");
     assert_eq!(config.cdn_path, "tpr/wow");
     assert_eq!(config.region, "us");
-    assert_eq!(config.locale, "enUS");
+    assert_eq!(config.tag_query.locale, "enUS");
+    assert_eq!(config.tag_query.region, "US");
+    assert_eq!(config.tag_query.platform, "Windows");
+    assert_eq!(config.tag_query.architecture, "x86_64");
+    assert!(config.tag_query.has_speech);
+    assert!(config.tag_query.has_text);
     assert_eq!(config.build_config, Some("aabb".to_string()));
     assert_eq!(config.cdn_config, Some("ccdd".to_string()));
     assert_eq!(config.max_connections_per_host, 3);

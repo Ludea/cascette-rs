@@ -42,12 +42,21 @@ impl SegmentHeader {
     /// `segment_index` is the segment number (0-1022).
     /// `path_hash` is the 16-byte hash of the storage path.
     pub fn generate(segment_index: u16, path_hash: &[u8; 16]) -> Self {
-        let mut headers =
-            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE));
+        let seg_base = u64::from(segment_index) * SEGMENT_SIZE;
+        // Reconstruction headers use encoded_size = 0x1E (30, the header
+        // size itself). ValidateDataIntegrity checks this value and skips
+        // the entire segment if it is not exactly 0x1E.
+        let enc_size = LOCAL_HEADER_SIZE as u32;
+
+        let mut headers = std::array::from_fn(|i| {
+            let global_offset = seg_base as usize + i * LOCAL_HEADER_SIZE;
+            LocalHeader::new([0u8; 16], enc_size, global_offset, 1)
+        });
 
         for (bucket, header) in headers.iter_mut().enumerate() {
             let key = generate_segment_key(path_hash, segment_index, bucket as u8);
-            *header = LocalHeader::new(key, 0, bucket * LOCAL_HEADER_SIZE);
+            let global_offset = seg_base as usize + bucket * LOCAL_HEADER_SIZE;
+            *header = LocalHeader::new(key, enc_size, global_offset, 1);
         }
 
         Self { headers }
@@ -56,7 +65,9 @@ impl SegmentHeader {
     /// Create a zeroed segment header (for new/empty segments).
     pub fn zeroed() -> Self {
         Self {
-            headers: std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE)),
+            headers: std::array::from_fn(|i| {
+                LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE, 1)
+            }),
         }
     }
 
@@ -69,7 +80,7 @@ impl SegmentHeader {
         }
 
         let mut headers =
-            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE));
+            std::array::from_fn(|i| LocalHeader::new([0u8; 16], 0, i * LOCAL_HEADER_SIZE, 1));
 
         for (i, header) in headers.iter_mut().enumerate() {
             let offset = i * LOCAL_HEADER_SIZE;
@@ -188,8 +199,7 @@ pub fn bucket_hash(ekey: &[u8], seed: u8) -> u8 {
 /// - Adjust byte \[0\] (0x00-0xFF) until the first 9 bytes hash to
 ///   the target bucket via `bucket_hash` with seed 1
 ///
-/// Called 16 times per segment (once per bucket) by
-/// `casc::ContainerIndex::GenerateSegmentHeaders`.
+/// Called 16 times per segment (once per bucket).
 fn generate_segment_key(path_hash: &[u8; 16], segment_count: u16, target_bucket: u8) -> [u8; 16] {
     let mut key = *path_hash;
 
@@ -212,9 +222,8 @@ fn generate_segment_key(path_hash: &[u8; 16], segment_count: u16, target_bucket:
 
 /// Generate a data file path for a segment.
 ///
-/// CASC uses `data.XXXX` naming (3-4 digits).
-/// From `casc::DynamicStorage::EnumerateArchiveSegments`, filenames are
-/// validated as `data.` followed by 3 or 4 ASCII digits.
+/// CASC uses `data.XXXX` naming (3-4 digits). Filenames are validated
+/// as `data.` followed by 3 or 4 ASCII digits.
 pub fn segment_data_path(base_dir: &std::path::Path, segment_index: u16) -> std::path::PathBuf {
     base_dir.join(format!("data.{segment_index:03}"))
 }
@@ -906,21 +915,29 @@ mod tests {
     #[test]
     fn test_set_bucket_header() {
         let mut header = SegmentHeader::zeroed();
-        let key = [0xAA; 16];
-        let local = LocalHeader::new(key, 1000, 0);
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        let key = [
+            0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let local = LocalHeader::new(key, 1000, 0, 0);
 
         header.set_bucket_header(5, local);
 
         let stored = header.bucket_header(5);
         assert_eq!(stored.original_encoding_key(), key);
-        assert_eq!(stored.size_with_header, 1000 + LOCAL_HEADER_SIZE as u32);
+        assert_eq!(stored.encoded_size, 1000);
     }
 
     #[test]
     fn test_set_bucket_header_masks_to_4_bits() {
         let mut header = SegmentHeader::zeroed();
-        let key = [0xBB; 16];
-        let local = LocalHeader::new(key, 500, 0);
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        let key = [
+            0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0xBB, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let local = LocalHeader::new(key, 500, 0, 0);
 
         // bucket 0x13 should be masked to 0x03
         header.set_bucket_header(0x13, local);
@@ -934,7 +951,17 @@ mod tests {
         let mut header = SegmentHeader::zeroed();
         let key = [0xCC; 16];
         let base_offset = 0;
-        let local = LocalHeader::new(key, 2000, base_offset);
+        let mut local = LocalHeader::new(key, 2000, base_offset, 0);
+
+        // LocalHeader::new leaves checksums at 0. Compute them in the correct
+        // order: checksum_a first (uses bytes[..0x16], before checksum_a
+        // position), then checksum_b (uses bytes[..0x1A], which includes
+        // checksum_a).
+        let bytes_a = local.to_bytes();
+        local.checksum_a = LocalHeader::compute_checksum_a(&bytes_a);
+        // Re-serialize so checksum_a is included in the byte range for checksum_b.
+        let bytes_b = local.to_bytes();
+        local.checksum_b = LocalHeader::compute_checksum_b(&bytes_b, base_offset);
 
         header.set_bucket_header(7, local);
 
@@ -949,11 +976,18 @@ mod tests {
     fn test_multiple_set_bucket_headers_different_buckets() {
         let mut header = SegmentHeader::zeroed();
 
-        let key_a = [0x11; 16];
-        let key_b = [0x22; 16];
+        // Only the first 9 bytes survive the reverse+zero-pad round-trip.
+        let key_a = [
+            0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+        let key_b = [
+            0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
 
-        header.set_bucket_header(2, LocalHeader::new(key_a, 100, 0));
-        header.set_bucket_header(9, LocalHeader::new(key_b, 200, 0));
+        header.set_bucket_header(2, LocalHeader::new(key_a, 100, 0, 1));
+        header.set_bucket_header(9, LocalHeader::new(key_b, 200, 0, 1));
 
         // Both should be present
         assert_eq!(header.bucket_header(2).original_encoding_key(), key_a);

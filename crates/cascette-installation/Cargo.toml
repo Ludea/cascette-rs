@@ -23,7 +23,12 @@ cascette-proto = { version = "0.2.0", path = "../cascette-proto" }
 
 # Workspace dependencies
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = [
+  "fs",
+  "io-util",
+  "sync",
+  "rt-multi-thread",
+] }
 futures = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
@@ -35,6 +40,8 @@ md5 = { workspace = true }
 binrw = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
+iana-time-zone = { workspace = true }
+isocountry = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }

@@ -91,10 +91,10 @@ fn decode_fixture_wow_classic_1_15_2_macos() {
 // ─── Local data tests (ignored, for manual runs) ────────────────────
 
 #[test]
-#[ignore = "requires local test data at ~/Downloads/wow_classic/"]
+#[ignore = "requires local test data at ~/Downloads/battle.net/wow_classic/"]
 fn decode_all_local_product_dbs() {
     let home = std::env::var("HOME").unwrap();
-    let root = PathBuf::from(home).join("Downloads/wow_classic");
+    let root = PathBuf::from(home).join("Downloads/battle.net/wow_classic");
     if !root.exists() {
         return;
     }

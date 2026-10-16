@@ -23,7 +23,12 @@ async-trait = { workspace = true }
 hex = { workspace = true }
 md5 = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = [
+  "fs",
+  "io-util",
+  "sync",
+  "rt-multi-thread",
+] }
 tracing = { workspace = true }
 
 [dev-dependencies]

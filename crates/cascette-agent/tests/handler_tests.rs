@@ -312,7 +312,7 @@ async fn test_post_download_update() {
     )
     .await;
 
-    // POST to update download config (Agent.exe wire format)
+    // POST to update download config (Blizzard Agent wire format)
     let router = common::test_router(state.clone());
     let req = Request::builder()
         .method(Method::POST)

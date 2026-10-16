@@ -40,11 +40,13 @@ internal configuration.
 
 This format is documented on [wowdev.wiki](https://wowdev.wiki/TACT) as the
 "Download Size" manifest. The wiki documents version 1 from an older Agent build
-(6700). The version 2 format with its 40-bit total size field is not documented
-on the wiki. The wiki's "EKey Size" byte at offset 3 corresponds to the
-`key_size_bits` field described below. Note that the wiki treats this as a
-byte count, but the field stores *bits* (e.g., 72 for 9-byte keys). The wiki
-does not document the tag section between header and entries.
+(6700). The wiki's "EKey Size" byte at offset 3 stores the key length in
+**bytes** (e.g., 9 for a 9-byte encoding key). The wiki does not document the
+tag section between header and entries.
+
+Note: The Blizzard Agent uses a different internal representation with
+`key_size_bits` (key length in bits) and per-entry null terminators + key hashes.
+The CDN wire format documented here does not use those fields.
 
 ## File Structure
 
@@ -61,53 +63,15 @@ The Size manifest is BLTE-encoded and contains:
 
 All multi-byte integers are big-endian.
 
-### Header
+### Header (15 bytes)
 
 ```c
 struct SizeManifestHeader {
     char     magic[2];           // "DS" (0x44, 0x53)
-    uint8_t  version;            // Version (1 or 2)
-    uint8_t  key_size_bits;      // Encoding key width in bits (e.g. 72 = 9 bytes)
-    uint32_t entry_count;        // Number of entries (big-endian)
-    uint16_t tag_count;          // Number of tags (big-endian)
-
-    // Version-specific fields follow
-};
-```
-
-| Offset | Size | Field | Description |
-|--------|------|-------|-------------|
-| 0 | 2 | `magic` | "DS" (0x44 0x53) |
-| 2 | 1 | `version` | Format version (1 or 2) |
-| 3 | 1 | `key_size_bits` | Encoding key width in **bits** (e.g. 72 = 9 bytes; byte count = `(bits + 7) >> 3`) |
-| 4 | 4 | `entry_count` | Number of entries (big-endian) |
-| 8 | 2 | `tag_count` | Number of tags after header (big-endian) |
-
-#### Version 1 Header Extension (offset 10)
-
-```c
-struct SizeManifestHeaderV1 {
-    // ... base header fields above ...
-    uint64_t total_size;         // Total size across all entries (big-endian)
-    uint8_t  esize_bytes;        // Byte width of eSize per entry (1-8)
-};
-// Total header size: 19 bytes (0x13)
-```
-
-| Offset | Size | Field | Description |
-|--------|------|-------|-------------|
-| 10 | 8 | `total_size` | Sum of all entry esize values (big-endian) |
-| 18 | 1 | `esize_bytes` | Byte width of esize per entry (1-8) |
-
-The `esize_bytes` field determines how many bytes each entry's size value
-occupies. Valid values are 1 through 8. Invalid values produce: "Invalid eSize
-byte count '%u' in size manifest header."
-
-#### Version 2 Header Extension (offset 10)
-
-```c
-struct SizeManifestHeaderV2 {
-    // ... base header fields above ...
+    uint8_t  version;            // Version (1)
+    uint8_t  ekey_size;          // Encoding key length in bytes (typically 9)
+    uint32_t num_files;          // Number of entries (big-endian)
+    uint16_t num_tags;           // Number of tags (big-endian)
     uint8_t  total_size[5];      // Total size as 40-bit big-endian integer
 };
 // Total header size: 15 bytes (0x0F)
@@ -115,19 +79,19 @@ struct SizeManifestHeaderV2 {
 
 | Offset | Size | Field | Description |
 |--------|------|-------|-------------|
-| 10 | 5 | `total_size` | Sum of all entry esize values, 40-bit big-endian (max ~1TB) |
+| 0 | 2 | `magic` | "DS" (0x44 0x53) |
+| 2 | 1 | `version` | Format version (1) |
+| 3 | 1 | `ekey_size` | Encoding key length in **bytes** (typically 9; valid range 1-16) |
+| 4 | 4 | `num_files` | Number of entries (big-endian) |
+| 8 | 2 | `num_tags` | Number of tags after header (big-endian) |
+| 10 | 5 | `total_size` | Sum of all entry esize values, 40-bit big-endian (max ~1 TB) |
 
-Version 2 fixes `esize_bytes` at 4 (32-bit sizes per entry). The total size
-uses a 40-bit integer (5 bytes), reducing header size compared to version 1.
+Only version 1 has been observed in the wild across all WoW Classic builds
+(1.13.2.31650 through 3.4.3.64272).
 
 ### Minimum Size Validation
 
-The parser validates two minimum sizes:
-
-1. **15 bytes** (0x0F) -- enough to read the base header plus the shorter V2
-   extension
-2. **19 bytes** (0x13) -- required for version 1 headers (checked after reading
-   the version byte)
+The parser requires at least **15 bytes** (0x0F) to read the header.
 
 If the data is too small: "Truncated data: expected {expected} bytes, got
 {actual} bytes"
@@ -135,7 +99,7 @@ If the data is too small: "Truncated data: expected {expected} bytes, got
 ### Tags
 
 Tags appear between the header and entries. The tag count is specified by the
-`tag_count` field in the header. Tags use the same binary format as install
+`num_tags` field in the header. Tags use the same binary format as install
 manifest tags (`InstallTag`), consisting of:
 
 - A null-terminated name string
@@ -145,7 +109,7 @@ manifest tags (`InstallTag`), consisting of:
 Tags are used for platform and architecture filtering (e.g., "Windows",
 "x86_64"), allowing the client to select entries relevant to the target system.
 
-When `tag_count` is 0, no tags are present and entries follow the header
+When `num_tags` is 0, no tags are present and entries follow the header
 directly.
 
 ### Entry Format
@@ -154,44 +118,17 @@ Entries are stored sequentially after the tags:
 
 ```c
 struct SizeManifestEntry {
-    uint8_t  ekey[ekey_byte_count]; // Encoding key: (key_size_bits+7)>>3 bytes
-    uint8_t  null_term;             // Null terminator (0x00) after the key
-    uint16_t key_hash;              // 2-byte big-endian hash identifier
-    uint8_t  esize[esize_bytes];    // Estimated size (variable width, big-endian)
+    uint8_t  ekey[ekey_size];    // Partial encoding key (ekey_size bytes from header)
+    uint32_t esize;              // Estimated file size (big-endian)
 };
 ```
 
 | Field | Size | Description |
 |-------|------|-------------|
-| `ekey` | `(key_size_bits+7)>>3` bytes | Encoding key (raw bytes) |
-| `null_term` | 1 byte | Null terminator (0x00) |
-| `key_hash` | 2 bytes BE | 16-bit hash identifier; 0x0000 and 0xFFFF are reserved |
-| `esize` | `esize_bytes` bytes | Estimated file size (big-endian, zero-extended to u64) |
+| `ekey` | `ekey_size` bytes | Partial encoding key (raw bytes) |
+| `esize` | 4 bytes BE | Estimated file size (big-endian u32) |
 
-The key length in bytes is computed from the header's `key_size_bits` field as
-`(key_size_bits + 7) >> 3`. The entry stride is `key_bytes + 1 + 2 + esize_bytes`.
-
-`key_hash` values 0x0000 and 0xFFFF are reserved sentinels; the parser rejects
-entries with these values.
-
-#### Entry Size Field
-
-The `esize` field width depends on the version:
-
-| Version | esize width | Source |
-|---------|-------------|--------|
-| 1 | `esize_bytes` from header (1-8) | Variable |
-| 2 | 4 bytes (fixed) | Hardcoded |
-
-The esize value is read as a big-endian unsigned integer and zero-extended to
-a u64 for internal representation.
-
-## Version History
-
-| Version | Header size | esize width | total_size width | Notes |
-|---------|-------------|-------------|------------------|-------|
-| 1 | 19 bytes | Variable (1-8) | 64-bit | Original format, documented on wowdev.wiki |
-| 2 | 15 bytes | Fixed (4) | 40-bit | Compact header, undocumented on wiki |
+The entry stride is `ekey_size + 4`. Entries are sorted descending by `esize`.
 
 ## Relationship to Other Manifests
 
@@ -212,13 +149,12 @@ The parser validates manifests at parse time and via an explicit `validate()`
 method:
 
 - Magic bytes must be "DS"
-- Version must be 1 or 2
-- `key_size_bits` must produce a byte count of 1-16 (i.e., `key_size_bits` in 1-128)
-- V1 `esize_bytes` must be 1-8
-- Tag count matches the header's `tag_count` field
-- Entry count matches the header's `entry_count` field
+- Version must be non-zero
+- `ekey_size` must be 1-16
+- Tag count matches the header's `num_tags` field
+- Entry count matches the header's `num_files` field
 - Sum of all entry esize values matches the header's `total_size` field
-- Each entry's key length matches `(key_size_bits + 7) >> 3`
+- Each entry's key length matches `ekey_size`
 
 ## Error Messages
 
@@ -227,12 +163,22 @@ method:
 | Bad magic | `InvalidMagic` -- "Invalid magic: expected 'DS', got {bytes}" |
 | Bad version | `UnsupportedVersion` -- "Unsupported version: {version}" |
 | Truncated data | `TruncatedData` -- "Truncated data: expected {expected} bytes, got {actual} bytes" |
-| Bad esize width (V1) | `InvalidEsizeWidth` -- "Invalid eSize byte count '{n}' in size manifest header" |
-| Bad key_size_bits | `InvalidEKeySize` -- "Invalid key_size_bits: must be 1-128 (1-16 bytes), got {n}" |
-| Reserved key_hash | `InvalidKeyHash` -- entry `key_hash` is 0x0000 or 0xFFFF |
+| Bad ekey_size | `InvalidEKeySize` -- "Invalid ekey_size {n}: must be 1-16" |
 | Tag count mismatch | `TagCountMismatch` -- "Tag count mismatch: header says {expected}, found {actual}" |
 | Entry count mismatch | `EntryCountMismatch` -- "Entry count mismatch: header says {expected}, found {actual}" |
 | Total size mismatch | `TotalSizeMismatch` -- "Total size mismatch: header says {expected}, sum of esizes is {actual}" |
+
+## Agent Internal Format (Reference)
+
+The Blizzard Agent uses a different internal representation of this data with:
+
+- `key_size_bits` as a u16 at offset 8 (key width in bits, not bytes)
+- u64 `total_size` for V1 (8 bytes instead of 40-bit)
+- `esize_bytes` field controlling variable-width entry sizes (1-8 bytes)
+- Null-terminated key + 2-byte `key_hash` per entry (0x0000 and 0xFFFF reserved)
+
+This internal format is documented in the management repository. The CDN wire
+format above is what clients download and what cascette-rs implements.
 
 ## Implementation Status
 
@@ -240,10 +186,8 @@ Implemented in `cascette-formats` crate (`crates/cascette-formats/src/size/`).
 
 The implementation provides:
 
-- Parser and builder for both version 1 and version 2 formats
+- Parser and builder for the wire format
 - Manual `BinRead`/`BinWrite` implementations for headers and entries
-- Variable-width esize field support (1-8 bytes for V1, fixed 4 bytes for V2)
-- 40-bit total_size handling for V2 headers
 - Tag support using the same `InstallTag` format as install/download manifests
 - Builder pattern with tag construction via `add_tag()` and `tag_file()`
 - `CascFormat` trait implementation for round-trip support

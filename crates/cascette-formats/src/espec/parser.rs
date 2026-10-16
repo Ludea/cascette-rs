@@ -264,7 +264,7 @@ impl<'a> Parser<'a> {
 
         self.consume(',')?;
 
-        // Parse 1-8 byte hex IV (variable length, Agent.exe zero-pads to 8)
+        // Parse 1-8 byte hex IV (variable length, zero-padded to 8 bytes)
         let iv = self.parse_hex_until(',', 1, 8)?;
 
         self.consume(',')?;

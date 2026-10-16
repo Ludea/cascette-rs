@@ -4,7 +4,7 @@
 //! When a corrupted entry is found, looks up the encoding key in manifests and
 //! downloads a replacement from CDN.
 //!
-//! Re-download strategy (mirrors Agent.exe repair state 6 CDN index set):
+//! Re-download strategy:
 //!
 //! 1. Try loose blob download from each endpoint.
 //! 2. If all loose blob attempts fail, look up the key in the local archive
@@ -130,8 +130,7 @@ impl<'a, S: CdnSource> DataRepairEngine<'a, S> {
         // Step 2: Re-download corrupted entries from CDN
         if !corrupted_keys.is_empty() && !mode.is_dry_run() {
             // Build archive index lookup for byte-range fallback.
-            // This mirrors Agent.exe repair state 6 (InitCdnIndexSet) which initialises
-            // a CDN index set covering both data and patch archives.
+            // Build a CDN index set covering both data and patch archives.
             let archive_lookup = self.build_archive_lookup();
 
             self.redownload_corrupted(&corrupted_keys, &archive_lookup, report)
@@ -163,7 +162,7 @@ impl<'a, S: CdnSource> DataRepairEngine<'a, S> {
             .map(|a| a.content_key.clone())
             .collect();
 
-        // Include patch archives if present — Agent.exe's CDN index set covers both.
+        // Include patch archives if present — the CDN index set covers both.
         for patch_archive in self.manifests.cdn_config.patch_archives() {
             archive_keys.push(patch_archive.content_key.clone());
         }
@@ -233,7 +232,7 @@ impl<'a, S: CdnSource> DataRepairEngine<'a, S> {
     ///    the encoding table's EKey pages.
     /// 2. Try loose blob download from each endpoint.
     /// 3. If all loose blob attempts fail, look up the key in the archive index
-    ///    and retry with a byte-range request (mirrors Agent.exe CDN index set).
+    ///    and retry with a byte-range request from the CDN archive.
     async fn try_redownload_entry(
         &self,
         truncated_key: &[u8; 9],

@@ -564,10 +564,9 @@ impl DynamicContainer {
 
     /// Remove a byte span from an archive entry.
     ///
-    /// CASC's `casc::Dynamic::RemoveSpan` adjusts the offset by +0x1E
-    /// (`LOCAL_HEADER_SIZE`) to account for the local header before the
-    /// BLTE data. It silently succeeds on FILE_NOT_FOUND and
-    /// PATH_NOT_FOUND errors.
+    /// The offset is adjusted by +0x1E (`LOCAL_HEADER_SIZE`) to account
+    /// for the local header before the BLTE data. Silently succeeds on
+    /// FILE_NOT_FOUND and PATH_NOT_FOUND errors.
     pub fn remove_span(&self, key: &[u8; 16], offset: u64, length: u64) -> Result<()> {
         if !self.access_mode.can_write() {
             return Err(StorageError::AccessDenied(
@@ -616,6 +615,7 @@ impl DynamicContainer {
 }
 
 impl Container for DynamicContainer {
+    #[allow(clippy::unused_async_trait_impl)]
     async fn reserve(&self, _key: &[u8; 16]) -> Result<()> {
         if !self.access_mode.can_write() {
             return Err(StorageError::AccessDenied(
@@ -628,6 +628,7 @@ impl Container for DynamicContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn read(&self, key: &[u8; 16], _offset: u64, _len: u32, buf: &mut [u8]) -> Result<usize> {
         if !self.access_mode.can_read() {
             return Err(StorageError::AccessDenied(
@@ -649,8 +650,8 @@ impl Container for DynamicContainer {
         let entry_size = entry.size;
 
         // Read from archive.
-        // Truncation detection: CASC's `casc::Dynamic::Read`
-        // checks if bytes_read < expected_size at the raw I/O level. If the
+        // Truncation detection: checks if bytes_read < expected_size
+        // at the raw I/O level. If the
         // archive file on disk is shorter than entry_size, `read_raw` (called
         // by `read_content`) returns an Archive error which we convert to
         // TruncatedRead.
@@ -698,6 +699,7 @@ impl Container for DynamicContainer {
         Ok(copy_len)
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn write(&self, key: &[u8; 16], data: &[u8]) -> Result<()> {
         if !self.access_mode.can_write() {
             return Err(StorageError::AccessDenied(
@@ -705,12 +707,12 @@ impl Container for DynamicContainer {
             ));
         }
 
-        // CASC `casc::Dynamic::Write`:
-        // 1. Validates access mode == 2 (ReadWrite)
-        // 2. Checks total_size = data.len() + 0x1E fits in a segment
-        // 3. Allocates via ContainerIndex (selects archive + offset)
-        // 4. Writes 30-byte header at storage offset, data at offset+0x1E
-        // 5. Updates KMT with new entry
+        // Write sequence:
+        // 1. Validate access mode (ReadWrite)
+        // 2. Check total_size = data.len() + 0x1E fits in a segment
+        // 3. Allocate via ContainerIndex (select archive + offset)
+        // 4. Write 30-byte header at storage offset, data at offset+0x1E
+        // 5. Update KMT with new entry
 
         // Write to archive (ArchiveManager handles BLTE encoding,
         // local header, and archive selection)
@@ -752,8 +754,12 @@ impl Container for DynamicContainer {
         // writes that start at offset 0 have no header region to update.
         if offset as usize >= crate::storage::segment::SEGMENT_HEADER_SIZE {
             let bucket = crate::storage::segment::bucket_hash(&encoding_key[..9], 0);
-            let local_header =
-                crate::storage::local_header::LocalHeader::new(encoding_key, total_size, 0);
+            let local_header = crate::storage::local_header::LocalHeader::new(
+                encoding_key,
+                total_size,
+                0,
+                1, // reconstruction header
+            );
             let archive = self.archive.read();
             let mut seg_header = archive.read_segment_header(archive_id).unwrap_or_default();
             seg_header.set_bucket_header(bucket, local_header);
@@ -775,6 +781,7 @@ impl Container for DynamicContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn remove(&self, key: &[u8; 16]) -> Result<()> {
         if !self.access_mode.can_write() {
             return Err(StorageError::AccessDenied(
@@ -782,8 +789,7 @@ impl Container for DynamicContainer {
             ));
         }
 
-        // CASC `casc::Dynamic::Remove`
-        // delegates to `DeleteKeys(arg1, arg2, 1)`.
+        // Remove the entry from the KMT and mark it as deleted.
         let ekey = EncodingKey::from_bytes(*key);
         let removed = {
             let mut index = self.index.write();
@@ -800,6 +806,7 @@ impl Container for DynamicContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn query(&self, key: &[u8; 16]) -> Result<bool> {
         let ekey = EncodingKey::from_bytes(*key);
         let index = self.index.read();

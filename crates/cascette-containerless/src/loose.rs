@@ -1,7 +1,7 @@
 //! Loose file storage.
 //!
 //! Files are stored at `{root}/{ekey_hex[0..2]}/{ekey_hex[2..4]}/{ekey_hex}`
-//! matching the CDN URL path convention used by TACTSharp and agent.exe.
+//! matching the CDN URL path convention used by TACT implementations.
 
 use std::path::{Path, PathBuf};
 
@@ -41,7 +41,7 @@ impl LooseFileStore {
     /// Write a loose file by encoding key.
     ///
     /// Writes to a `.tmp` sibling file then renames atomically, matching
-    /// Agent.exe's temp-then-rename pattern for crash safety.
+    /// Temp-then-rename pattern for crash safety.
     pub async fn write(&self, ekey: &[u8; 16], data: &[u8]) -> ContainerlessResult<()> {
         let path = self.path_for_ekey(ekey);
         if let Some(parent) = path.parent() {

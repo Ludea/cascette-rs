@@ -10,7 +10,6 @@ use crate::models::progress::Progress;
 use super::db::Database;
 
 /// Operation queue backed by SQLite.
-#[derive(Debug, Clone)]
 pub struct OperationQueue {
     db: Database,
 }

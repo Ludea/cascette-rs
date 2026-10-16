@@ -6,8 +6,8 @@
 //! - **Block Patch** (`block_patch`): Block-by-block byte-level diff for BLTE-chunked files
 //! - **Re-encode** (`reencode`): Decode and re-encode with a different ESpec
 //!
-//! These strategies match the agent.exe state machines:
-//! `FileBsDiffPatchState`, `FileBlockPatchState`, and `FileReEncodePatchState`.
+//! These strategies correspond to the TACT patch state machines for BsDiff,
+//! block patch, and re-encode operations.
 
 /// Patch chain application (multi-step orchestrator)
 pub mod applicator;

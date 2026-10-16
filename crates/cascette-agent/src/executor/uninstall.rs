@@ -1,21 +1,21 @@
 //! Uninstall executor: checks for running processes and removes installation files.
 //!
-//! Matches Agent.exe's `HasMultipleProducts` check: if another product shares
-//! the same install path, only product-specific files are removed; the shared
-//! `Data/` directory is preserved.
+//! If another product shares the same install path, only product-specific
+//! files are removed; the shared `Data/` directory is preserved.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::error::{AgentError, AgentResult};
-use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
 use crate::process_detection;
+use crate::server::router::AppState;
 
-/// Product-specific files removed on uninstall (matching Agent.exe's task list).
+/// Product-specific files removed on uninstall.
 ///
 /// These are relative to the product install path. `Data/` is only removed when
 /// no other product shares the install path.

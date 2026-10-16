@@ -1,6 +1,6 @@
 //! Archive merger — consolidates low-utilization segments.
 //!
-//! Matches `casc::ArchiveMerger` from the Agent.exe spec. Sorts segments by
+//! Implements the CASC archive merger. Sorts segments by
 //! utilization and merges the least-utilized into the most-utilized targets
 //! that have enough free space.
 

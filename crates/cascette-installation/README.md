@@ -5,7 +5,7 @@ CASC installation pipeline: install, extract, verify, and repair operations.
 ## Operations
 
 - **Install** -- Populate `Data/data/`, `Data/indices/`, `Data/config/`,
-  `.build.info` from CDN. Matches agent.exe behavior.
+  `.build.info` from CDN.
 - **Extract** -- Write game files from CASC storage to product subdirectories.
 - **Verify** -- Check installation integrity (existence, size, or full
   MD5 + BLTE verification).

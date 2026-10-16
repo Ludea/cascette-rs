@@ -38,8 +38,8 @@ mod tests {
         file.write_all(b"[{\"id\":1,\"product\":\"test_product\",\"version\":\"1.0.0\",\"build\":\"1\",\"build_config\":\"0123456789abcdef0123456789abcdef\",\"cdn_config\":\"fedcba9876543210fedcba9876543210\",\"product_config\":null,\"build_time\":\"2024-01-01T00:00:00+00:00\",\"encoding_ekey\":\"aaaabbbbccccddddeeeeffffaaaaffff\",\"root_ekey\":\"bbbbccccddddeeeeffffaaaabbbbcccc\",\"install_ekey\":\"ccccddddeeeeffffaaaabbbbccccdddd\",\"download_ekey\":\"ddddeeeeffffaaaabbbbccccddddeeee\"}]").unwrap();
 
         let config = ServerConfig {
-            http_bind: "0.0.0.0:8080".parse().unwrap(),
-            tcp_bind: "0.0.0.0:1119".parse().unwrap(),
+            http_bind: "127.0.0.1:8080".parse().unwrap(),
+            tcp_bind: "127.0.0.1:1119".parse().unwrap(),
             builds: file.path().to_path_buf(),
             cdn_hosts: "cdn.test.com".to_string(),
             cdn_path: "test/path".to_string(),

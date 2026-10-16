@@ -7,7 +7,9 @@
 pub mod classify;
 pub mod download;
 pub mod install;
+pub mod install_loose;
 pub mod loose;
 pub mod manifests;
 pub mod metadata;
+pub mod root_content;
 pub mod update;

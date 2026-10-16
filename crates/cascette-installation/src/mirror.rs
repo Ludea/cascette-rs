@@ -7,7 +7,7 @@ use cascette_protocol::CdnEndpoint;
 
 /// Community CDN mirrors that host historical CASC content.
 pub const COMMUNITY_MIRRORS: &[&str] =
-    &["cdn.arctium.tools", "casc.wago.tools", "archive.wow.tools"];
+    &["archive.wow.tools", "casc.wago.tools", "cdn.arctium.tools"];
 
 /// Mirror selection configuration.
 #[derive(Debug, Clone)]
@@ -58,7 +58,7 @@ impl MirrorConfig {
     }
 }
 
-/// Backoff weight multipliers from agent.exe reverse engineering.
+/// Backoff weight multipliers for CDN endpoint scoring.
 ///
 /// These control how much a host's weight increases after specific HTTP errors.
 pub mod backoff {

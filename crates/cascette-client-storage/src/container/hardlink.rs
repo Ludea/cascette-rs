@@ -25,7 +25,7 @@ use tracing::{debug, info, warn};
 use crate::container::{AccessMode, Container};
 use crate::{Result, StorageError};
 
-/// Hard link test file name used by `casc::HardLink::TestSupport`.
+/// Hard link test file name used to probe filesystem support.
 const HARDLINK_TEST_FILE: &str = "casc_hard_link_test_file";
 
 /// Trie directory token file name.
@@ -61,7 +61,7 @@ struct FdCacheEntry {
 ///
 /// Caches path existence checks to avoid repeated filesystem stat
 /// calls. Uses a flat array doubly-linked list for O(1) LRU
-/// operations matching Agent.exe's FD cache pattern.
+/// operations using an FD cache pattern.
 struct FdCache {
     /// Cached entries keyed by 9-byte encoding key.
     entries: HashMap<[u8; 9], FdCacheEntry>,
@@ -207,7 +207,7 @@ impl TrieDirectoryStorage {
     }
 
     /// Clean the trie directory: remove all files except `.idx` and
-    /// `shmem*` files. Matches Agent.exe's `CleanDirectory`.
+    /// `shmem*` files.
     fn clean_directory(&mut self) -> Result<usize> {
         let mut removed = 0;
         self.fd_cache.clear();
@@ -283,7 +283,7 @@ impl TrieDirectoryStorage {
     }
 
     /// Compact the trie directory: validate structure at each depth,
-    /// remove orphaned files. Matches Agent.exe's `CompactDirectory`.
+    /// remove orphaned files.
     fn compact_directory(&mut self) -> Result<usize> {
         let mut removed = 0;
         self.fd_cache.clear();
@@ -425,8 +425,7 @@ impl HardLinkContainer {
 
     /// Test if the filesystem supports hard links.
     ///
-    /// Creates and removes test files matching CASC's
-    /// `casc::HardLink::TestSupport`:
+    /// Creates and removes test files to check hard link support:
     /// 1. Delete existing test files in both directories
     /// 2. Create test file in source directory
     /// 3. Attempt hard link to target directory
@@ -692,6 +691,7 @@ impl HardLinkContainer {
 }
 
 impl Container for HardLinkContainer {
+    #[allow(clippy::unused_async_trait_impl)]
     async fn reserve(&self, _key: &[u8; 16]) -> Result<()> {
         if !self.supported {
             return Err(StorageError::Config(
@@ -706,6 +706,7 @@ impl Container for HardLinkContainer {
         Ok(())
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn read(
         &self,
         _key: &[u8; 16],
@@ -726,6 +727,7 @@ impl Container for HardLinkContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn write(&self, _key: &[u8; 16], _data: &[u8]) -> Result<()> {
         // Hard link container creates links, not data writes
         Err(StorageError::InvalidFormat(
@@ -733,6 +735,7 @@ impl Container for HardLinkContainer {
         ))
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn remove(&self, key: &[u8; 16]) -> Result<()> {
         if !self.supported {
             return Err(StorageError::Config(
@@ -751,6 +754,7 @@ impl Container for HardLinkContainer {
         self.remove_file(key, &path)
     }
 
+    #[allow(clippy::unused_async_trait_impl)]
     async fn query(&self, key: &[u8; 16]) -> Result<bool> {
         if !self.supported {
             return Ok(false);

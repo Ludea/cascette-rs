@@ -13,8 +13,6 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
-use crate::handlers::AppState;
-
 /// Timeout for Ribbit metadata resolution queries.
 const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -22,11 +20,12 @@ use cascette_crypto::{TactKey, TactKeyProvider, TactKeyStore};
 use cascette_formats::config::KeyringConfig;
 use cascette_import::ImportProvider;
 use cascette_installation::ProgressEvent;
-use cascette_installation::config::InstallConfig;
+use cascette_installation::config::{InstallConfig, TagQuery};
 use cascette_protocol::{CdnClient, CdnEndpoint, RibbitTactClient};
 
 use crate::error::{AgentError, AgentResult};
 use crate::models::progress::Progress;
+use crate::server::router::AppState;
 
 /// Metadata resolved from Ribbit for a product in a given region.
 pub struct ProductMetadata {
@@ -44,6 +43,12 @@ pub struct ProductMetadata {
     pub build_id: String,
     /// Keyring config hash from Ribbit (optional, not all products have one).
     pub keyring_hash: Option<String>,
+    /// Product config hash from Ribbit (optional, newer builds only).
+    /// Points to a JSON file on CDN at `{ConfigPath}/{hash[0:2]}/{hash[2:4]}/{hash}`.
+    pub product_config_hash: Option<String>,
+    /// CDN config path for product config JSON files (e.g., "tpr/configs/data").
+    /// Extracted from the `ConfigPath` column in the CDNs BPSV response.
+    pub config_path: Option<String>,
 }
 
 /// Query Ribbit for a product's version and CDN information.
@@ -124,12 +129,18 @@ async fn resolve_product_metadata_inner(
         .get_raw_by_name("KeyRing", versions.schema())
         .map(ToString::to_string);
 
+    let product_config_hash = version_row
+        .get_raw_by_name("ProductConfig", versions.schema())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+
     // Resolve CDN endpoints from Ribbit, then prepend any operator overrides.
     let cdns_endpoint = format!("v1/products/{product}/cdns");
     let cdns = ribbit.query(&cdns_endpoint).await?;
 
     let mut resolved_endpoints = Vec::new();
     let mut cdn_path = String::new();
+    let mut config_path = None;
 
     for row in cdns.rows() {
         // Filter to matching region if possible
@@ -137,6 +148,12 @@ async fn resolve_product_metadata_inner(
 
         if !row_region.eq_ignore_ascii_case(region) && !resolved_endpoints.is_empty() {
             continue;
+        }
+
+        // Extract ConfigPath from the first matching row.
+        if config_path.is_none() {
+            config_path =
+                cascette_protocol::product_config::config_path_from_bpsv_row(row, cdns.schema());
         }
 
         if let Ok(ep) = CdnClient::endpoint_from_bpsv_row(row, cdns.schema()) {
@@ -156,6 +173,13 @@ async fn resolve_product_metadata_inner(
     // Prepend operator-configured overrides so they are tried first,
     // with Ribbit-advertised endpoints as fallback.
     let (endpoints, cdn_path) = if let Some(overrides) = cdn_overrides {
+        let override_hosts: Vec<&str> = overrides.iter().map(|e| e.host.as_str()).collect();
+        debug!(
+            product,
+            override_hosts = ?override_hosts,
+            ribbit_endpoints = resolved_endpoints.len(),
+            "prepending CDN host overrides"
+        );
         let all = overrides
             .iter()
             .cloned()
@@ -189,6 +213,8 @@ async fn resolve_product_metadata_inner(
         version_name,
         build_id,
         keyring_hash,
+        product_config_hash,
+        config_path,
     })
 }
 
@@ -391,6 +417,12 @@ impl ProgressBridge {
                 ProgressEvent::MetadataResolving { .. } => {
                     p.phase = "resolving".to_string();
                 }
+                ProgressEvent::ManifestDownloading { ref manifest_type } => {
+                    p.phase = "resolving".to_string();
+                    p.current_file = Some(manifest_type.clone());
+                }
+                ProgressEvent::ManifestComplete { .. }
+                | ProgressEvent::ArchiveIndexComplete { .. } => {}
                 ProgressEvent::MetadataResolved {
                     artifacts,
                     total_bytes,
@@ -403,7 +435,13 @@ impl ProgressBridge {
                     p.phase = "downloading indices".to_string();
                     p.current_file = Some(format!("index {index}/{total}"));
                 }
-                ProgressEvent::ArchiveIndexComplete { .. } => {}
+                ProgressEvent::LooseFilePhaseStarted { files, .. } => {
+                    p.phase = "downloading loose files".to_string();
+                    p.current_file = Some(format!("{files} files"));
+                }
+                ProgressEvent::LooseFilePhaseComplete { files_placed } => {
+                    p.current_file = Some(format!("{files_placed} loose files placed"));
+                }
                 ProgressEvent::FileDownloading { ref path, size } => {
                     // Record start time and expected size for speed measurement.
                     if let Ok(mut s) = speed.try_lock() {
@@ -411,10 +449,11 @@ impl ProgressBridge {
                     }
                     p.phase = "downloading".to_string();
                     p.current_file = Some(path.clone());
-                    let new_bytes = p.bytes_done.saturating_add(size);
-                    p.update_bytes(new_bytes);
+                    // Do NOT update bytes_done here — that inflates progress
+                    // before the file actually completes. bytes_done is updated
+                    // in FileComplete when the file is confirmed written.
                 }
-                ProgressEvent::FileComplete { ref path } => {
+                ProgressEvent::FileComplete { ref path, bytes } => {
                     // Compute per-file speed from the Instant+size stored at
                     // FileDownloading, feed the sample into the EMA.
                     let ema = speed
@@ -424,6 +463,9 @@ impl ProgressBridge {
                     if let Some(bps) = ema {
                         p.set_speed(bps);
                     }
+                    // Update bytes on completion, not on FileDownloading.
+                    let new_bytes = p.bytes_done.saturating_add(bytes);
+                    p.update_bytes(new_bytes);
                     let new_files = p.files_done.saturating_add(1);
                     p.update_files(new_files);
                 }
@@ -445,6 +487,8 @@ impl ProgressBridge {
                     if let Some(bps) = ema {
                         p.set_speed(bps);
                     }
+                    let new_bytes = p.bytes_done.saturating_add(bytes);
+                    p.update_bytes(new_bytes);
                     let new_files = p.files_done.saturating_add(1);
                     p.update_files(new_files);
                 }
@@ -484,6 +528,10 @@ impl ProgressBridge {
                     p.phase = "patching".to_string();
                     p.current_file = Some(path.clone());
                 }
+                ProgressEvent::LayoutWritten => {
+                    p.phase = "finalizing".to_string();
+                    p.current_file = Some("writing .build.info".to_string());
+                }
             }
         }
     }
@@ -504,6 +552,8 @@ pub fn build_update_config(
     base_cdn_config: String,
     target_build_config: String,
     target_cdn_config: String,
+    platform: Option<&str>,
+    architecture: Option<&str>,
 ) -> cascette_installation::config::UpdateConfig {
     let mut config = cascette_installation::config::UpdateConfig::new(
         product.to_string(),
@@ -516,7 +566,14 @@ pub fn build_update_config(
     );
     config.endpoints = endpoints;
     config.region = region.to_string();
-    config.locale = locale.to_string();
+    let mut tag_query = TagQuery::new(
+        platform.unwrap_or("Windows"),
+        architecture.unwrap_or("x86_64"),
+        locale,
+        TagQuery::region_from_ribbit(region),
+    );
+    tag_query.apply_geo_defaults();
+    config.tag_query = tag_query;
     config.max_connections_per_host = 3;
     config.max_connections_global = 12;
     config.resume = true;
@@ -535,6 +592,10 @@ pub fn build_install_config(
     build_config: Option<String>,
     cdn_config: Option<String>,
     game_subfolder: Option<String>,
+    account_country: Option<String>,
+    geo_ip_country: Option<String>,
+    platform: Option<&str>,
+    architecture: Option<&str>,
 ) -> InstallConfig {
     let mut config = InstallConfig::new(
         product.to_string(),
@@ -543,7 +604,16 @@ pub fn build_install_config(
     );
     config.endpoints = endpoints;
     config.region = region.to_string();
-    config.locale = locale.to_string();
+    let mut tag_query = TagQuery::new(
+        platform.unwrap_or("Windows"),
+        architecture.unwrap_or("x86_64"),
+        locale,
+        TagQuery::region_from_ribbit(region),
+    );
+    tag_query.account_country = account_country;
+    tag_query.geo_ip_country = geo_ip_country;
+    tag_query.apply_geo_defaults();
+    config.tag_query = tag_query;
     config.build_config = build_config;
     config.cdn_config = cdn_config;
     config.game_subfolder = game_subfolder;
@@ -576,7 +646,7 @@ pub async fn resolve_version_from_wago(
 
 /// Resolve CDN path and official endpoints from Ribbit for a product/region.
 ///
-/// This queries only the CDN endpoint list (not versions), which is
+/// Queries only the CDN endpoint list (not versions), which is
 /// product-level and version-independent. Used when custom build_config/cdn_config
 /// are specified and the full `resolve_product_metadata` (which queries versions
 /// too) should be skipped.
@@ -632,4 +702,224 @@ async fn resolve_cdn_info_inner(
     }
 
     Ok((cdn_path, endpoints))
+}
+
+/// Resolve bootstrapper metadata from the `bts` product on Ribbit.
+///
+/// The `bts` product provides the setup/provisioner binary (e.g.,
+/// `World-of-Warcraft-Setup.exe`), not the game launcher.
+///
+/// The `bts` product has non-standard BPSV semantics:
+/// - `bts/versions`: The "Region" column contains Battle.net product family
+///   codes (e.g., "wow" for all WoW variants), not geographic regions.
+///   Filter by `product_tag`.
+/// - `bts/cdns`: Uses standard geographic regions ("us", "eu", etc.).
+///   Filter by the user's `region`.
+///
+/// This function is separate from `resolve_product_metadata` because it
+/// applies different filters to the versions vs CDNs BPSV responses.
+///
+/// # Arguments
+///
+/// * `product_tag` - The product family tag for filtering `bts/versions` (e.g., "wow").
+/// * `region` - Geographic region for filtering `bts/cdns` (e.g., "us").
+pub async fn resolve_bootstrapper_metadata(
+    ribbit: &RibbitTactClient,
+    product_tag: &str,
+    region: &str,
+    cdn_overrides: Option<&[CdnEndpoint]>,
+) -> AgentResult<ProductMetadata> {
+    tokio::time::timeout(
+        METADATA_TIMEOUT,
+        resolve_bootstrapper_metadata_inner(ribbit, product_tag, region, cdn_overrides),
+    )
+    .await
+    .map_err(|_| {
+        AgentError::Timeout(format!(
+            "bootstrapper metadata resolution for tag {product_tag} timed out after {METADATA_TIMEOUT:?}"
+        ))
+    })?
+}
+
+async fn resolve_bootstrapper_metadata_inner(
+    ribbit: &RibbitTactClient,
+    product_tag: &str,
+    region: &str,
+    cdn_overrides: Option<&[CdnEndpoint]>,
+) -> AgentResult<ProductMetadata> {
+    // Query bts/versions — Region column contains product codes, not regions.
+    let versions = ribbit.query("v1/products/bts/versions").await?;
+
+    let version_row = versions
+        .rows()
+        .iter()
+        .find(|row| {
+            row.get_raw_by_name("Region", versions.schema())
+                .is_some_and(|r| r.eq_ignore_ascii_case(product_tag))
+        })
+        .ok_or_else(|| {
+            AgentError::InvalidConfig(format!("no bts/versions row for product tag {product_tag}"))
+        })?;
+
+    let build_config = version_row
+        .get_raw_by_name("BuildConfig", versions.schema())
+        .ok_or_else(|| AgentError::InvalidConfig("missing BuildConfig in bts/versions".into()))?
+        .to_string();
+
+    let cdn_config = version_row
+        .get_raw_by_name("CDNConfig", versions.schema())
+        .ok_or_else(|| AgentError::InvalidConfig("missing CDNConfig in bts/versions".into()))?
+        .to_string();
+
+    let version_name = version_row
+        .get_raw_by_name("VersionsName", versions.schema())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let build_id = version_row
+        .get_raw_by_name("BuildId", versions.schema())
+        .unwrap_or("0")
+        .to_string();
+
+    let keyring_hash = version_row
+        .get_raw_by_name("KeyRing", versions.schema())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+
+    // Query bts/cdns — Name column uses standard geographic regions.
+    let cdns = ribbit.query("v1/products/bts/cdns").await?;
+
+    let mut resolved_endpoints = Vec::new();
+    let mut cdn_path = String::new();
+
+    for row in cdns.rows() {
+        let row_region = row.get_raw_by_name("Name", cdns.schema()).unwrap_or("");
+
+        if !row_region.eq_ignore_ascii_case(region) && !resolved_endpoints.is_empty() {
+            continue;
+        }
+
+        if let Ok(ep) = CdnClient::endpoint_from_bpsv_row(row, cdns.schema()) {
+            if cdn_path.is_empty() {
+                cdn_path.clone_from(&ep.path);
+            }
+            resolved_endpoints.push(ep);
+        }
+    }
+
+    if resolved_endpoints.is_empty() {
+        return Err(AgentError::InvalidConfig(
+            "no CDN endpoints found for bts product".to_string(),
+        ));
+    }
+
+    // Apply operator CDN overrides, rewriting their path to the bts product's
+    // Ribbit-resolved CDN path. Override endpoints carry the game product's path
+    // (e.g. tpr/wow) but the bts product uses its own path (e.g. tpr/bnt004).
+    let (endpoints, cdn_path) = if let Some(overrides) = cdn_overrides {
+        let all = overrides
+            .iter()
+            .cloned()
+            .map(|mut ep| {
+                ep.path.clone_from(&cdn_path);
+                ep
+            })
+            .chain(resolved_endpoints)
+            .collect::<Vec<_>>();
+        (all, cdn_path)
+    } else {
+        (resolved_endpoints, cdn_path)
+    };
+
+    debug!(
+        product_tag,
+        version = %version_name,
+        build_config = %build_config,
+        cdn_config = %cdn_config,
+        cdn_path = %cdn_path,
+        endpoints = endpoints.len(),
+        "resolved bootstrapper metadata"
+    );
+
+    Ok(ProductMetadata {
+        build_config,
+        cdn_config,
+        cdn_path,
+        endpoints,
+        version_name,
+        build_id,
+        keyring_hash,
+        product_config_hash: None,
+        config_path: None,
+    })
+}
+
+/// Build an `InstallConfig` for a bts install operation (bootstrapper or launcher).
+///
+/// Used for both operation 2 (bootstrapper/setup binary) and operation 3
+/// (launcher binary). Both extract to the install root with no subfolder.
+///
+/// The bts launcher install manifest uses product-specific tags (e.g., `"wow"`,
+/// `"d3"`, `"hero"`) in the Architecture tag group to filter entries per game.
+/// Each entry is tagged with `[platform, product_code, "launcher"]`. Passing
+/// `bts_product_tag` adds the product code to the tag query, selecting only
+/// the correct game's launcher from the shared manifest.
+///
+/// For the bootstrapper operation (operation 2), `bts_product_tag` should be
+/// `None` — the bootstrapper manifest has only platform tags (OSX/Windows)
+/// and the build itself is already product-specific via Ribbit Region filtering.
+///
+/// For the launcher binary operation (operation 3), `bts_product_tag` should
+/// be `Some("wow")` (or the appropriate product tag) to filter the shared
+/// launcher manifest to only the product's files.
+#[allow(clippy::too_many_arguments)]
+pub fn build_launcher_install_config(
+    install_path: &str,
+    cdn_path: &str,
+    endpoints: Vec<CdnEndpoint>,
+    region: &str,
+    locale: &str,
+    build_config: String,
+    cdn_config: String,
+    platform: Option<&str>,
+    architecture: Option<&str>,
+    bts_product_tag: Option<&str>,
+) -> InstallConfig {
+    let mut config = InstallConfig::new(
+        "bts".to_string(),
+        PathBuf::from(install_path),
+        cdn_path.to_string(),
+    );
+    config.endpoints = endpoints;
+    config.region = region.to_string();
+
+    // The bts launcher manifest tag table uses non-standard tag types:
+    //   - Platform group: "Windows", "OSX"
+    //   - Architecture group: product codes ("wow", "d3", "hero", etc.)
+    //   - Locale group: "launcher", "installer"
+    //
+    // Standard architecture/locale tags (x86_64, enUS) are silently ignored
+    // since they don't exist in the bts manifest. The effective query is:
+    //   [platform, product_tag?, "launcher"]
+    let mut tag_query = TagQuery::new(
+        platform.unwrap_or("Windows"),
+        architecture.unwrap_or("x86_64"),
+        locale,
+        TagQuery::region_from_ribbit(region),
+    );
+    tag_query.has_speech = false;
+    tag_query.has_text = false;
+    tag_query.extra_tags.push("launcher".to_string());
+    if let Some(pt) = bts_product_tag {
+        tag_query.extra_tags.push(pt.to_string());
+    }
+    config.tag_query = tag_query;
+
+    config.build_config = Some(build_config);
+    config.cdn_config = Some(cdn_config);
+    config.game_subfolder = None; // Extract to install root.
+    config.max_connections_per_host = 3;
+    config.max_connections_global = 6; // Fewer connections than the game install.
+    config.resume = true;
+    config
 }

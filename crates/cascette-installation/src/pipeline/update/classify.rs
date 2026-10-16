@@ -175,6 +175,7 @@ pub fn classify_update_artifacts<S: BuildHasher, S2: BuildHasher>(
             file_size: entry.file_size,
             priority,
             priority_value,
+            is_loose_file: true,
         };
 
         // Check alternate residency for leeching
@@ -361,6 +362,7 @@ mod tests {
                     file_size: size,
                     priority: PriorityCategory::Normal,
                     priority_value: 3,
+                    is_loose_file: true,
                 },
                 category,
                 bytes_present,

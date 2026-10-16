@@ -8,7 +8,7 @@
 //! # Operations
 //!
 //! - **Install** -- Populate `Data/data/`, `Data/indices/`, `Data/config/`,
-//!   `.build.info` from CDN. Matches agent.exe behavior.
+//!   `.build.info` from CDN.
 //! - **Extract** -- Write game files from CASC storage to product
 //!   subdirectories (e.g., `_classic_era_/`).
 //! - **Verify** -- Check installation integrity (existence, size, or full
@@ -41,6 +41,7 @@ pub mod config;
 pub mod endpoint_scorer;
 pub mod error;
 pub mod extract;
+pub mod geolocation;
 pub mod layout;
 pub mod mirror;
 /// Patch application pipeline (BsDiff, block-level diff, re-encode)
@@ -53,7 +54,8 @@ pub mod verify;
 // Re-exports
 pub use cdn_source::CdnSource;
 pub use config::{
-    ExtractConfig, InstallConfig, RepairConfig, UpdateConfig, VerifyConfig, VerifyMode,
+    ExtractConfig, InstallConfig, InstallMode, RepairConfig, TagQuery, UpdateConfig, VerifyConfig,
+    VerifyMode,
 };
 pub use error::{InstallationError, InstallationResult};
 pub use pipeline::install::InstallPipeline;

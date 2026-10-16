@@ -1,7 +1,8 @@
 //! MurmurHash3 fmix64 finalizer
 //!
-//! Agent.exe uses the fmix64 mixer from MurmurHash3 to distribute TACT key IDs
-//! across its keyring hash map buckets. This module provides that single function.
+//! The Blizzard Agent uses the fmix64 mixer from MurmurHash3 to distribute TACT
+//! key IDs across its keyring hash map buckets. This module provides that single
+//! function.
 //!
 //! The fmix64 function is the finalizer stage of MurmurHash3_x64_128. It mixes
 //! all bits of a 64-bit input to produce a well-distributed 64-bit output.
@@ -9,7 +10,7 @@
 /// MurmurHash3 fmix64 bit mixer.
 ///
 /// Applies the standard fmix64 finalizer from Austin Appleby's MurmurHash3.
-/// This is used by Agent.exe to hash TACT key IDs for its keyring hash map.
+/// The Blizzard Agent uses this to hash TACT key IDs for its keyring hash map.
 ///
 /// # Examples
 ///

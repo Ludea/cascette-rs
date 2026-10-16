@@ -262,12 +262,8 @@ impl UpdatePipeline {
                         None
                     };
 
-                    let tags: Vec<&str> = self
-                        .config
-                        .platform_tags
-                        .iter()
-                        .map(String::as_str)
-                        .collect();
+                    let tag_names = self.config.tag_query.tag_names();
+                    let tags: Vec<&str> = tag_names.iter().map(String::as_str).collect();
 
                     // Build empty patch chains map for initial classification
                     // (real chains are built in ProcessingPatches)
@@ -292,7 +288,7 @@ impl UpdatePipeline {
                     )?;
 
                     // Detect files present in the base build but absent from the
-                    // target build (agent.exe status 6, FilterLooseFiles state 9).
+                    // target build.
                     artifact_set.obsolete = classify::detect_obsolete_files(
                         &base_manifests.install,
                         &target_manifests.install,
@@ -524,16 +520,16 @@ impl UpdatePipeline {
                         })
                         .collect();
 
-                    // Initialize loose file handler if subfolder is configured
-                    let loose_handler = match &self.config.game_subfolder {
-                        Some(subfolder) => {
-                            let handler = loose::LooseFileHandler::new(
-                                subfolder.clone(),
-                                self.config.install_path.clone(),
-                            )?;
-                            Some(Arc::new(tokio::sync::Mutex::new(handler)))
-                        }
-                        None => None,
+                    // Initialize loose file handler. When game_subfolder is None
+                    // (e.g. launcher/bts install), use empty string to place loose
+                    // files directly in the install root.
+                    let subfolder = self.config.game_subfolder.clone().unwrap_or_default();
+                    let loose_handler = {
+                        let handler = loose::LooseFileHandler::new(
+                            subfolder,
+                            self.config.install_path.clone(),
+                        )?;
+                        Some(Arc::new(tokio::sync::Mutex::new(handler)))
                     };
 
                     let handler_ref = loose_handler.clone();
@@ -579,6 +575,9 @@ impl UpdatePipeline {
                     )
                     .await?;
 
+                    // Flush index entries to disk.
+                    installation.flush_indices().await?;
+
                     UpdateState::WritingLayout {
                         target_manifests,
                         download_report,
@@ -596,7 +595,7 @@ impl UpdatePipeline {
                     obsolete,
                 } => {
                     // Remove obsolete files before writing the new layout.
-                    // Matches agent.exe Phase 7: "Failed to remove obsolete loose file %s"
+                    // Remove obsolete loose files from the previous build.
                     let mut obsolete_removed: usize = 0;
                     for file in &obsolete {
                         let file_path = self.config.install_path.join(&file.path);
@@ -626,7 +625,12 @@ impl UpdatePipeline {
                         &self.config.target_build_config,
                         &self.config.target_cdn_config,
                     );
-                    layout::write_layout(&layout_config, &target_manifests).await?;
+                    layout::write_layout(
+                        &layout_config,
+                        &target_manifests,
+                        download_report.bytes_downloaded,
+                    )
+                    .await?;
 
                     // Clear checkpoint on success
                     Checkpoint::clear(&self.config.install_path).await?;
@@ -667,8 +671,7 @@ impl UpdatePipeline {
             self.config.cdn_path.clone(),
         );
         config.region.clone_from(&self.config.region);
-        config.platform_tags.clone_from(&self.config.platform_tags);
-        config.locale.clone_from(&self.config.locale);
+        config.tag_query = self.config.tag_query.clone();
         config.build_config = Some(build_config.to_string());
         config.cdn_config = Some(cdn_config.to_string());
         config.endpoints.clone_from(&self.config.endpoints);
