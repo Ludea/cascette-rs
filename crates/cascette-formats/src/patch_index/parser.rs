@@ -384,14 +384,6 @@ pub fn parse_patch_index_full(data: &[u8]) -> PatchIndexResult<ParsedPatchIndex>
                     espec_table = espec;
                 }
             }
-            BLOCK_TYPE_V3 => {
-                let (ks, ents, espec) = parse_block10(block_data)?;
-                key_size = ks;
-                entries_v3 = ents;
-                if espec.is_some() {
-                    espec_table = espec;
-                }
-            }
             // Block type 1 (config) and unknown types are skipped.
             // Unrecognized block types are ignored without error.
             _ => {}
