@@ -56,21 +56,12 @@ winapi = { version = "0.3", features = [
 libc = "0.2"
 
 # Async runtime
-[target.'cfg(not(target_os = "wasi"))'.dependencies]
 tokio = { workspace = true, features = [
-    "fs",
     "io-util",
-    "sync",
-    "rt-multi-thread",
+    "sync"
 ]}
-
-# Async runtime
-[target.'cfg(target_os = "wasi")'.dependencies]
-tokio = { workspace = true, features = [
-  "io-util",
-  "sync",
-]}
-wasip3-fs = { git = "https://github.com/Ludea/wasi-fs" }
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+wasip3-fs = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

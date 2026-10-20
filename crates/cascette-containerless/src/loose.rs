@@ -5,7 +5,10 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg(not(target_os = "wasi"))]
 use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 use tracing::debug;
 
 use crate::error::ContainerlessResult;

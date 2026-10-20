@@ -6,7 +6,10 @@
 
 use std::collections::HashSet;
 
+#[cfg(not(target_os = "wasi"))]
 use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 use tracing::{debug, info, warn};
 
 use crate::config::ContainerlessConfig;

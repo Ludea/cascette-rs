@@ -14,6 +14,10 @@ use std::path::Path;
 use tracing::debug;
 
 use crate::error::{ContainerlessError, ContainerlessResult};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 pub use files::FileEntry;
 pub use meta::BuildMeta;
@@ -179,10 +183,10 @@ impl FileDatabase {
 
         let db_path = find_db_file(temp_dir)?;
 
-        let db_data = tokio::fs::read(&db_path).await?;
+        let db_data = fs::read(&db_path).await?;
         let wal_path = db_path.with_extension("db-wal");
         let wal_data = if wal_path.exists() {
-            tokio::fs::read(&wal_path).await.unwrap_or_default()
+            fs::read(&wal_path).await.unwrap_or_default()
         } else {
             Vec::new()
         };
@@ -231,7 +235,7 @@ async fn unpack_db_bytes(
 
     if data.len() >= SQLITE_MAGIC.len() && data[..SQLITE_MAGIC.len()] == *SQLITE_MAGIC {
         // Plain SQLite file — write directly.
-        tokio::fs::write(&db_path, data).await?;
+        fs::write(&db_path, data).await?;
     } else if data.len() >= 4 {
         // Bundled format with length-prefixed db + wal.
         let db_len = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
@@ -244,9 +248,9 @@ async fn unpack_db_bytes(
         let db_bytes = &data[4..4 + db_len];
         let wal_bytes = &data[4 + db_len..];
 
-        tokio::fs::write(&db_path, db_bytes).await?;
+        fs::write(&db_path, db_bytes).await?;
         if !wal_bytes.is_empty() {
-            tokio::fs::write(db_path.with_extension("db-wal"), wal_bytes).await?;
+            fs::write(db_path.with_extension("db-wal"), wal_bytes).await?;
         }
     } else {
         return Err(ContainerlessError::Integrity(

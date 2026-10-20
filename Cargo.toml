@@ -146,6 +146,8 @@ criterion = { version = "0.8", features = ["html_reports"] }
 walkdir = "2.5"
 wiremock = "0.6"
 
+wasip3-fs = { git = "https://github.com/Ludea/wasi-fs" }
+
 [profile.release]
 lto = true
 codegen-units = 1
