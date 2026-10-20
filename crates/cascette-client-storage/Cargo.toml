@@ -60,7 +60,7 @@ tokio = { workspace = true, features = [
     "io-util",
     "sync"
 ]}
-[target.'cfg(not(target_os = "wasi"))'.dependencies]
+[target.'cfg(target_os = "wasi")'.dependencies]
 wasip3-fs = { workspace = true }
 
 [dev-dependencies]
