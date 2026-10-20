@@ -24,8 +24,8 @@ use cascette_installation::config::{InstallConfig, TagQuery};
 use cascette_protocol::{CdnClient, CdnEndpoint, RibbitTactClient};
 
 use crate::error::{AgentError, AgentResult};
-use crate::models::progress::Progress;
 use crate::handlers::AppState;
+use crate::models::progress::Progress;
 
 /// Metadata resolved from Ribbit for a product in a given region.
 pub struct ProductMetadata {

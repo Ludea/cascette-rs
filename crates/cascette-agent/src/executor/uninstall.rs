@@ -10,10 +10,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::error::{AgentError, AgentResult};
+use crate::handlers::AppState;
 use crate::models::operation::{Operation, OperationState};
 use crate::models::product::ProductStatus;
 use crate::process_detection;
-use crate::handlers::AppState;
 
 /// Product-specific files removed on uninstall.
 ///

@@ -9,8 +9,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
 use crate::error::AgentResult;
-use crate::models::operation::{ErrorInfo, OperationState, OperationType};
 use crate::handlers::AppState;
+use crate::models::operation::{ErrorInfo, OperationState, OperationType};
 
 /// Background operation runner that processes queued operations.
 pub struct OperationRunner {

@@ -6,8 +6,8 @@ use chrono::Utc;
 use tracing::debug;
 
 use crate::error::{AgentError, AgentResult};
-use crate::models::product::{Product, ProductStatus};
 use crate::handlers::ProductDownloadConfig;
+use crate::models::product::{Product, ProductStatus};
 
 use super::db::Database;
 

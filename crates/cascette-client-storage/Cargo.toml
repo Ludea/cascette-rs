@@ -41,6 +41,12 @@ serde_json = { workspace = true }
 # Logging
 tracing = { workspace = true }
 
+# Async runtime
+tokio = { workspace = true, features = [
+    "io-util",
+    "sync"
+]}
+
 # Platform-specific dependencies
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = [
@@ -55,11 +61,6 @@ winapi = { version = "0.3", features = [
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-# Async runtime
-tokio = { workspace = true, features = [
-    "io-util",
-    "sync"
-]}
 [target.'cfg(target_os = "wasi")'.dependencies]
 wasip3-fs = { workspace = true }
 

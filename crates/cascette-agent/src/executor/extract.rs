@@ -10,8 +10,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::error::{AgentError, AgentResult};
-use crate::models::operation::{Operation, OperationState};
 use crate::handlers::AppState;
+use crate::models::operation::{Operation, OperationState};
 
 use super::helpers::{ProgressBridge, build_install_config, resolve_product_metadata};
 
