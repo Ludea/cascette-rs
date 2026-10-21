@@ -26,6 +26,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use futures::stream::{self, StreamExt};
 use tracing::{debug, info, warn};
@@ -1078,7 +1082,7 @@ pub async fn download_archive_indices<S: CdnSource + 'static>(
                         continue;
                     }
                     let index_path = indices_dir.join(format!("{key}.index"));
-                    tokio::fs::write(&index_path, &data).await?;
+                    fs::write(&index_path, &data).await?;
                     downloaded += 1;
                     progress(ProgressEvent::ArchiveIndexComplete { archive_key: key });
                 }
@@ -1165,7 +1169,7 @@ pub async fn download_patch_archive_indices<S: CdnSource + 'static>(
             match result {
                 Ok((key, data)) => {
                     let index_path = indices_dir.join(format!("{key}.index"));
-                    tokio::fs::write(&index_path, &data).await?;
+                    fs::write(&index_path, &data).await?;
                     downloaded += 1;
                     progress(ProgressEvent::ArchiveIndexComplete { archive_key: key });
                 }

@@ -28,6 +28,10 @@ use tracing::info;
 
 use cascette_client_storage::Installation;
 use cascette_protocol::CdnEndpoint;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::cdn_source::CdnSource;
 use crate::checkpoint::Checkpoint;
@@ -133,8 +137,8 @@ pub async fn run<S: CdnSource + 'static>(
     // The client also looks for `Data/config/` and `Data/indices/`. Make
     // them up-front so the client's directory-walk during initial setup
     // finds the layout shape it expects.
-    tokio::fs::create_dir_all(config.install_path.join("Data").join("config")).await?;
-    tokio::fs::create_dir_all(config.install_path.join("Data").join("indices")).await?;
+    fs::create_dir_all(config.install_path.join("Data").join("config")).await?;
+    fs::create_dir_all(config.install_path.join("Data").join("indices")).await?;
 
     // Phase 4: Build the install-manifest path lookup the loose handler uses.
     //

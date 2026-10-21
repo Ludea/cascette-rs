@@ -14,6 +14,10 @@ pub use super::loose;
 
 use std::collections::HashMap;
 use std::sync::Arc;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use tracing::{debug, info, warn};
 
@@ -404,7 +408,7 @@ impl UpdatePipeline {
                     checkpoint,
                 } => {
                     let indices_dir = self.config.install_path.join("Data").join("indices");
-                    tokio::fs::create_dir_all(&indices_dir).await?;
+                    fs::create_dir_all(&indices_dir).await?;
 
                     if endpoints.is_empty() {
                         return Err(InstallationError::InvalidConfig("no endpoints".to_string()));
@@ -600,7 +604,7 @@ impl UpdatePipeline {
                     for file in &obsolete {
                         let file_path = self.config.install_path.join(&file.path);
                         if file_path.exists() {
-                            match tokio::fs::remove_file(&file_path).await {
+                            match fs::remove_file(&file_path).await {
                                 Ok(()) => {
                                     debug!(path = %file.path, "removed obsolete file");
                                     obsolete_removed += 1;

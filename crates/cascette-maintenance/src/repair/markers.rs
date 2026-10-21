@@ -5,6 +5,10 @@
 //! - `CASCRepair.mrk` — binary marker recording repair state for crash recovery
 
 use std::path::Path;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::error::{MaintenanceError, MaintenanceResult};
 use crate::report::RepairReport;
@@ -27,13 +31,13 @@ impl RepairMarker {
             content.push_str(&hex::encode(key));
             content.push('\n');
         }
-        tokio::fs::write(path, content.as_bytes()).await?;
+        fs::write(path, content.as_bytes()).await?;
         Ok(())
     }
 
     /// Read a PSV marker file.
     pub async fn read_psv(path: &Path) -> MaintenanceResult<Self> {
-        let content = tokio::fs::read_to_string(path).await?;
+        let content = fs::read_to_string(path).await?;
         let mut keys = Vec::new();
 
         for line in content.lines() {
@@ -60,7 +64,7 @@ impl RepairMarker {
 
     /// Delete a PSV marker file. No error if the file does not exist.
     pub async fn delete(path: &Path) -> MaintenanceResult<()> {
-        match tokio::fs::remove_file(path).await {
+        match fs::remove_file(path).await {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(e.into()),
@@ -87,7 +91,7 @@ impl RepairMarker {
             report.loose_files_repaired,
             report.indices_rebuilt,
         );
-        tokio::fs::write(path, content.as_bytes()).await?;
+        fs::write(path, content.as_bytes()).await?;
         Ok(())
     }
 }
@@ -110,13 +114,13 @@ impl CascRepairMarker {
         let mut data = Vec::with_capacity(8);
         data.extend_from_slice(&version.to_le_bytes());
         data.extend_from_slice(&state.to_le_bytes());
-        tokio::fs::write(path, &data).await?;
+        fs::write(path, &data).await?;
         Ok(())
     }
 
     /// Read a binary repair marker. Returns `None` if the file does not exist.
     pub async fn read(path: &Path) -> MaintenanceResult<Option<Self>> {
-        let data = match tokio::fs::read(path).await {
+        let data = match fs::read(path).await {
             Ok(d) => d,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(e.into()),
@@ -137,7 +141,7 @@ impl CascRepairMarker {
 
     /// Delete a binary repair marker. No error if the file does not exist.
     pub async fn delete(path: &Path) -> MaintenanceResult<()> {
-        match tokio::fs::remove_file(path).await {
+        match fs::remove_file(path).await {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(e.into()),
@@ -224,7 +228,7 @@ mod tests {
             ..Default::default()
         };
         RepairMarker::write_summary(&path, &report).await.unwrap();
-        let content = tokio::fs::read_to_string(&path).await.unwrap();
+        let content = fs::read_to_string(&path).await.unwrap();
         assert!(content.contains("entries_corrupted|3"));
         assert!(content.contains("entries_redownloaded|2"));
     }

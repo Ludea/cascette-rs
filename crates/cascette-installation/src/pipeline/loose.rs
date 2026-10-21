@@ -9,7 +9,11 @@ use std::path::PathBuf;
 
 use cascette_formats::CascFormat;
 use cascette_formats::blte::BlteFile;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use tracing::{debug, info, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use cascette_client_storage::Installation;
 use cascette_client_storage::container::AccessMode;
@@ -105,7 +109,7 @@ impl LooseFileHandler {
 
         // Ensure parent directories exist
         if let Some(parent) = destination.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+            fs::create_dir_all(parent).await?;
         }
 
         if self.hardlinks_supported {
@@ -134,7 +138,7 @@ impl LooseFileHandler {
         } else {
             installation.read_file_by_encoding_key(&ekey_obj).await?
         };
-        tokio::fs::write(&destination, &data).await?;
+        fs::write(&destination, &data).await?;
         debug!(path = %file_path, "loose file copied");
         self.completed_paths.insert(destination);
 
@@ -168,7 +172,7 @@ impl LooseFileHandler {
 
         // Ensure parent directories exist
         if let Some(parent) = destination.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+            fs::create_dir_all(parent).await?;
         }
 
         // Decode BLTE data to raw bytes
@@ -185,12 +189,12 @@ impl LooseFileHandler {
 
         // Write to .tmp then atomic rename (write → verify size → rename with retries).
         let tmp_path = destination.with_extension("tmp");
-        tokio::fs::write(&tmp_path, &raw_data).await?;
+        fs::write(&tmp_path, &raw_data).await?;
 
         // Atomic rename with retries (3 attempts)
         let mut rename_err = None;
         for attempt in 0..3u8 {
-            match tokio::fs::rename(&tmp_path, &destination).await {
+            match fs::rename(&tmp_path, &destination).await {
                 Ok(()) => {
                     rename_err = None;
                     break;
@@ -209,7 +213,7 @@ impl LooseFileHandler {
         }
         if let Some(e) = rename_err {
             // Clean up temp file on final failure
-            let _ = tokio::fs::remove_file(&tmp_path).await;
+            let _ = fs::remove_file(&tmp_path).await;
             return Err(crate::error::InstallationError::Io(e));
         }
 

@@ -10,6 +10,11 @@ use crate::config::InstallConfig;
 use crate::error::InstallationResult;
 use crate::pipeline::manifests::BuildManifests;
 
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
+
 /// Write `.build.info` to the installation root.
 ///
 /// Column ordering matches Blizzard Agent output (14 columns).
@@ -187,7 +192,7 @@ pub async fn write_build_info(
 
     let document = builder.build();
     let content = cascette_formats::bpsv::format(&document);
-    tokio::fs::write(&path, content.as_bytes()).await?;
+    fs::write(&path, content.as_bytes()).await?;
 
     Ok(())
 }

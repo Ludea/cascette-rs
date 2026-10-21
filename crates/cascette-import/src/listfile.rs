@@ -14,6 +14,10 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 /// Raw listfile download URL (GitHub releases).
 const LISTFILE_RAW_URL: &str =
@@ -100,7 +104,7 @@ impl ListfileProvider {
             return Ok(());
         }
 
-        let content = tokio::fs::read_to_string(&cache_file)
+        let content = fs::read_to_string(&cache_file)
             .await
             .map_err(ImportError::Io)?;
 
@@ -136,7 +140,7 @@ impl ListfileProvider {
         };
 
         let json = serde_json::to_string_pretty(&entry).map_err(ImportError::Json)?;
-        tokio::fs::write(self.cache_dir.join("mappings.json"), json)
+        fs::write(self.cache_dir.join("mappings.json"), json)
             .await
             .map_err(ImportError::Io)?;
 

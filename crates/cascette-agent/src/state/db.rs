@@ -1,6 +1,10 @@
 //! Database initialization, schema creation, and migrations.
 
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use turso::Connection;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::error::AgentResult;
 
@@ -22,7 +26,7 @@ impl Database {
     pub async fn open(path: &std::path::Path) -> AgentResult<Self> {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+            fs::create_dir_all(parent).await?;
         }
 
         let path_str = path.to_string_lossy().to_string();

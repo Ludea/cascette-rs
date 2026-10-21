@@ -6,8 +6,12 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::error::{AgentError, AgentResult};
 use crate::handlers::AppState;
@@ -86,7 +90,7 @@ pub async fn execute(
                     path = %path,
                     "removing installation directory"
                 );
-                if let Err(e) = tokio::fs::remove_dir_all(&path_buf).await {
+                if let Err(e) = fs::remove_dir_all(&path_buf).await {
                     warn!(
                         product = %operation.product_code,
                         path = %path,
@@ -145,7 +149,7 @@ async fn remove_product_specific_files(base: &Path) {
     for name in PRODUCT_SPECIFIC_FILES {
         let target = base.join(name);
         if target.exists()
-            && let Err(e) = tokio::fs::remove_file(&target).await
+            && let Err(e) = fs::remove_file(&target).await
         {
             warn!(path = %target.display(), error = %e, "failed to remove product file");
         }

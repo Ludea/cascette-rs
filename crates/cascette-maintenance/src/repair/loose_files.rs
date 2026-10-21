@@ -31,7 +31,11 @@ use std::path::PathBuf;
 use cascette_client_storage::Installation;
 use cascette_installation::{BuildManifests, CdnSource};
 use cascette_protocol::{CdnEndpoint, ContentType};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use tracing::{info, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::ExecutionMode;
 use crate::error::MaintenanceResult;
@@ -134,7 +138,7 @@ impl<'a, S: CdnSource> LooseFileRepairEngine<'a, S> {
             let expected_size = u64::from(entry.file_size);
 
             let needs_repair = if loose_path.exists() {
-                match tokio::fs::metadata(&loose_path).await {
+                match fs::metadata(&loose_path).await {
                     Ok(meta) if meta.len() != expected_size => {
                         warn!(
                             "Loose file size mismatch: {} (expected {expected_size}, got {})",
@@ -162,9 +166,9 @@ impl<'a, S: CdnSource> LooseFileRepairEngine<'a, S> {
             match self.installation.read_file_by_encoding_key(&ekey).await {
                 Ok(data) => {
                     if let Some(parent) = loose_path.parent() {
-                        tokio::fs::create_dir_all(parent).await?;
+                        fs::create_dir_all(parent).await?;
                     }
-                    tokio::fs::write(&loose_path, &data).await?;
+                    fs::write(&loose_path, &data).await?;
                     report.loose_files_repaired += 1;
                     info!("Re-extracted loose file: {}", loose_path.display());
                 }
@@ -182,9 +186,9 @@ impl<'a, S: CdnSource> LooseFileRepairEngine<'a, S> {
                             match self.installation.read_file_by_encoding_key(&ekey).await {
                                 Ok(data) => {
                                     if let Some(parent) = loose_path.parent() {
-                                        tokio::fs::create_dir_all(parent).await?;
+                                        fs::create_dir_all(parent).await?;
                                     }
-                                    tokio::fs::write(&loose_path, &data).await?;
+                                    fs::write(&loose_path, &data).await?;
                                     report.loose_files_repaired += 1;
                                     info!(
                                         "Re-extracted loose file after CDN repair: {}",
@@ -235,9 +239,9 @@ impl<'a, S: CdnSource> LooseFileRepairEngine<'a, S> {
                     match self.redownload_config(expected_hash).await {
                         Ok(data) => {
                             if let Some(parent) = path.parent() {
-                                tokio::fs::create_dir_all(parent).await?;
+                                fs::create_dir_all(parent).await?;
                             }
-                            tokio::fs::write(path, &data).await?;
+                            fs::write(path, &data).await?;
                             report.loose_files_repaired += 1;
                             info!("Repaired config file: {}", path.display());
                         }
@@ -249,7 +253,7 @@ impl<'a, S: CdnSource> LooseFileRepairEngine<'a, S> {
                 continue;
             }
 
-            let content = tokio::fs::read(path).await?;
+            let content = fs::read(path).await?;
             let actual_hash = format!("{:x}", md5::compute(&content));
 
             if actual_hash != *expected_hash {
@@ -260,7 +264,7 @@ impl<'a, S: CdnSource> LooseFileRepairEngine<'a, S> {
                 if !mode.is_dry_run() {
                     match self.redownload_config(expected_hash).await {
                         Ok(data) => {
-                            tokio::fs::write(path, &data).await?;
+                            fs::write(path, &data).await?;
                             report.loose_files_repaired += 1;
                             info!("Repaired config file: {}", path.display());
                         }

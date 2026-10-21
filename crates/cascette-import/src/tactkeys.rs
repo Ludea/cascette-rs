@@ -17,6 +17,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 /// Raw TACT keys download URL.
 const TACTKEYS_RAW_URL: &str = "https://raw.githubusercontent.com/wowdev/TACTKeys/master/WoW.txt";
@@ -107,7 +111,7 @@ impl TactKeysProvider {
             return Ok(());
         }
 
-        let content = tokio::fs::read_to_string(&cache_file)
+        let content = fs::read_to_string(&cache_file)
             .await
             .map_err(ImportError::Io)?;
 
@@ -157,7 +161,7 @@ impl TactKeysProvider {
         };
 
         let json = serde_json::to_string_pretty(&entry).map_err(ImportError::Json)?;
-        tokio::fs::write(self.cache_dir.join("keys.json"), json)
+        fs::write(self.cache_dir.join("keys.json"), json)
             .await
             .map_err(ImportError::Io)?;
 

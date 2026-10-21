@@ -8,6 +8,11 @@ use crate::config::InstallConfig;
 use crate::error::InstallationResult;
 use crate::pipeline::manifests::BuildManifests;
 
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
+
 /// Write build config and CDN config files to `Data/config/`.
 ///
 /// Each config is stored at `Data/config/{hash[0..2]}/{hash[2..4]}/{hash}`
@@ -62,10 +67,10 @@ async fn write_config_file(
     }
 
     let dir = config_dir.join(&hash[..2]).join(&hash[2..4]);
-    tokio::fs::create_dir_all(&dir).await?;
+    fs::create_dir_all(&dir).await?;
 
     let file_path = dir.join(hash);
-    tokio::fs::write(&file_path, data).await?;
+    fs::write(&file_path, data).await?;
 
     Ok(())
 }

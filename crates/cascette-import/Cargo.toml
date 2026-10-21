@@ -21,7 +21,11 @@ reqwest = { workspace = true, features = ["json"] }
 async-trait = { workspace = true }
 hex = { workspace = true }
 rustls = { workspace = true }
+tracing = { workspace = true }
 cascette-crypto = { version = "0.2.0", path = "../cascette-crypto" }
+
+[target.'cfg(target_os = "wasi")'.dependencies]
+wasip3-fs = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

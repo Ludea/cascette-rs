@@ -9,7 +9,11 @@ pub mod config_store;
 pub mod flavor_info;
 pub mod product_db;
 
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use tracing::info;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::config::InstallConfig;
 use crate::error::InstallationResult;
@@ -49,7 +53,7 @@ pub async fn write_layout(
     // Write .patch.result to signal the client that no update is pending.
     // Without this file, the client contacts the live patch server and
     // refuses to start if a newer build exists.
-    tokio::fs::write(config.install_path.join(".patch.result"), b"0").await?;
+    fs::write(config.install_path.join(".patch.result"), b"0").await?;
 
     Ok(())
 }

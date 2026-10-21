@@ -18,6 +18,11 @@ use crate::config::ExtractConfig;
 use crate::error::{InstallationError, InstallationResult};
 use crate::progress::ProgressEvent;
 
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
+
 /// Report from extraction.
 #[derive(Debug)]
 pub struct ExtractReport {
@@ -112,9 +117,9 @@ impl ExtractPipeline {
             {
                 Ok(data) => {
                     if let Some(parent) = output_file.parent() {
-                        tokio::fs::create_dir_all(parent).await?;
+                        fs::create_dir_all(parent).await?;
                     }
-                    tokio::fs::write(&output_file, &data).await?;
+                    fs::write(&output_file, &data).await?;
                     extracted += 1;
                     debug!(path = %normalized, "extracted");
                     progress(ProgressEvent::ExtractComplete {

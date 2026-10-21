@@ -9,6 +9,10 @@
 //! ```
 
 use std::path::Path;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::error::InstallationResult;
 
@@ -21,8 +25,8 @@ pub async fn write_flavor_info(
     product_code: &str,
 ) -> InstallationResult<()> {
     let dir = install_path.join(subfolder);
-    tokio::fs::create_dir_all(&dir).await?;
+    fs::create_dir_all(&dir).await?;
     let content = format!("Product Flavor!STRING:0\n{product_code}\n");
-    tokio::fs::write(dir.join(".flavor.info"), content).await?;
+    fs::write(dir.join(".flavor.info"), content).await?;
     Ok(())
 }

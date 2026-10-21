@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 /// wago.tools API base URL.
 const WAGO_API_BASE: &str = "https://wago.tools/api/builds";
@@ -169,7 +173,7 @@ impl WagoProvider {
             return Ok(());
         }
 
-        let content = tokio::fs::read_to_string(&cache_file)
+        let content = fs::read_to_string(&cache_file)
             .await
             .map_err(ImportError::Io)?;
 
@@ -205,7 +209,7 @@ impl WagoProvider {
         };
 
         let json = serde_json::to_string_pretty(&entry).map_err(ImportError::Json)?;
-        tokio::fs::write(self.cache_dir.join("builds.json"), json)
+        fs::write(self.cache_dir.join("builds.json"), json)
             .await
             .map_err(ImportError::Io)?;
 

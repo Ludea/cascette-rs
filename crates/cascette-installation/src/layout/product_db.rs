@@ -7,6 +7,10 @@
 use prost::Message;
 
 use cascette_proto::proto_database;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::config::InstallConfig;
 use crate::error::InstallationResult;
@@ -150,7 +154,7 @@ pub async fn write_product_db(
     };
 
     let data = product_install.encode_to_vec();
-    tokio::fs::write(&path, &data).await?;
+    fs::write(&path, &data).await?;
 
     Ok(())
 }

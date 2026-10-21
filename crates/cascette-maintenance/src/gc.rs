@@ -12,7 +12,11 @@ use std::time::Instant;
 
 use cascette_client_storage::Installation;
 use cascette_installation::BuildManifests;
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use tracing::info;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::ExecutionMode;
 use crate::error::MaintenanceResult;
@@ -204,14 +208,14 @@ impl<'a> GarbageCollector<'a> {
         let mut removed = 0;
 
         // Walk config directory (two-level: config/XX/XXXXXXXXXXX...)
-        let mut top_dir = tokio::fs::read_dir(&config_dir).await?;
+        let mut top_dir = fs::read_dir(&config_dir).await?;
         while let Some(prefix_entry) = top_dir.next_entry().await? {
             let prefix_path = prefix_entry.path();
             if !prefix_path.is_dir() {
                 continue;
             }
 
-            let mut sub_dir = tokio::fs::read_dir(&prefix_path).await?;
+            let mut sub_dir = fs::read_dir(&prefix_path).await?;
             while let Some(file_entry) = sub_dir.next_entry().await? {
                 let file_path = file_entry.path();
                 if !file_path.is_file() {
@@ -229,7 +233,7 @@ impl<'a> GarbageCollector<'a> {
 
                 if !active_hashes.contains(&full_hash) {
                     if !mode.is_dry_run() {
-                        tokio::fs::remove_file(&file_path).await?;
+                        fs::remove_file(&file_path).await?;
                     }
                     removed += 1;
                     info!("Config cleanup: removing {}", file_path.display());
@@ -268,7 +272,7 @@ impl<'a> GarbageCollector<'a> {
 
         let mut removed = 0;
 
-        let mut dir = tokio::fs::read_dir(&indices_dir).await?;
+        let mut dir = fs::read_dir(&indices_dir).await?;
         while let Some(entry) = dir.next_entry().await? {
             let file_name = entry.file_name();
             let name = file_name.to_string_lossy();
@@ -282,7 +286,7 @@ impl<'a> GarbageCollector<'a> {
 
             if !active_archives.contains(&base) {
                 if !mode.is_dry_run() {
-                    tokio::fs::remove_file(entry.path()).await?;
+                    fs::remove_file(entry.path()).await?;
                 }
                 removed += 1;
                 info!("CDN index cleanup: removing {}", entry.path().display());
@@ -335,7 +339,7 @@ impl<'a> GarbageCollector<'a> {
                 orphaned += 1;
                 let segment_path = data_path.join(format!("data.{segment_id:03}"));
                 if segment_path.exists() {
-                    tokio::fs::remove_file(&segment_path).await?;
+                    fs::remove_file(&segment_path).await?;
                     deleted += 1;
                     info!("Deleted orphaned segment: {}", segment_path.display());
                 }
@@ -350,13 +354,13 @@ impl<'a> GarbageCollector<'a> {
         let mut cleaned = 0;
 
         if data_path.is_dir() {
-            let mut dir = tokio::fs::read_dir(&data_path).await?;
+            let mut dir = fs::read_dir(&data_path).await?;
             while let Some(entry) = dir.next_entry().await? {
                 let path = entry.path();
                 if path.is_dir() {
-                    let mut sub_dir = tokio::fs::read_dir(&path).await?;
+                    let mut sub_dir = fs::read_dir(&path).await?;
                     if sub_dir.next_entry().await?.is_none() {
-                        tokio::fs::remove_dir(&path).await?;
+                        fs::remove_dir(&path).await?;
                         cleaned += 1;
                     }
                 }

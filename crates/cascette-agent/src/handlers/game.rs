@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::handlers::AppState;
 use crate::handlers::error_codes::AGENT_ERROR_INVALID_REQUEST;
@@ -187,7 +191,7 @@ async fn write_launcher_db(install_path: &str, body: &GameConfigRequest) {
     });
     let bytes = content.to_string().into_bytes();
 
-    match tokio::fs::File::create(&db_path).await {
+    match fs::File::create(&db_path).await {
         Ok(mut f) => {
             if let Err(e) = f.write_all(&bytes).await {
                 tracing::warn!(

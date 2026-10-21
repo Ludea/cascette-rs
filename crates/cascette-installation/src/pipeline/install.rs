@@ -4,7 +4,11 @@ use cascette_crypto::ContentKey;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
 use tracing::{info, warn};
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use cascette_client_storage::Installation;
 use cascette_protocol::CdnEndpoint;
@@ -279,7 +283,7 @@ impl InstallPipeline {
                     install_manifest_paths,
                 } => {
                     let indices_dir = self.config.install_path.join("Data").join("indices");
-                    tokio::fs::create_dir_all(&indices_dir).await?;
+                    fs::create_dir_all(&indices_dir).await?;
 
                     if endpoints.is_empty() {
                         return Err(InstallationError::InvalidConfig("no endpoints".to_string()));

@@ -8,6 +8,10 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+#[cfg(not(target_os = "wasi"))]
+use tokio::fs;
+#[cfg(target_os = "wasi")]
+use wasip3_fs as fs;
 
 use crate::error::{InstallationError, InstallationResult};
 
@@ -80,7 +84,7 @@ impl Checkpoint {
     /// Returns an error only if the file exists but cannot be parsed.
     pub async fn read(install_path: &Path) -> InstallationResult<Option<Self>> {
         let path = Self::file_path(install_path);
-        match tokio::fs::read_to_string(&path).await {
+        match fs::read_to_string(&path).await {
             Ok(content) => {
                 let checkpoint: Self = serde_json::from_str(&content).map_err(|e| {
                     InstallationError::Checkpoint(format!(
@@ -104,15 +108,15 @@ impl Checkpoint {
 
         // Ensure the Data/ directory exists
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+            fs::create_dir_all(parent).await?;
         }
 
         let content = serde_json::to_string_pretty(self)?;
 
         // Write atomically via temp file
         let tmp_path = path.with_extension("json.tmp");
-        tokio::fs::write(&tmp_path, content.as_bytes()).await?;
-        tokio::fs::rename(&tmp_path, &path).await?;
+        fs::write(&tmp_path, content.as_bytes()).await?;
+        fs::rename(&tmp_path, &path).await?;
 
         Ok(())
     }
@@ -120,7 +124,7 @@ impl Checkpoint {
     /// Remove the checkpoint file.
     pub async fn clear(install_path: &Path) -> InstallationResult<()> {
         let path = Self::file_path(install_path);
-        match tokio::fs::remove_file(&path).await {
+        match fs::remove_file(&path).await {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(InstallationError::Checkpoint(format!(
